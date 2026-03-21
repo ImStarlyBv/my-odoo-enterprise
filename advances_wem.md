@@ -240,13 +240,65 @@ volumes:
 `COPY . .` in the Dockerfile already bakes everything (including `extra-addons/`) into the image. The bind mount was redundant and harmful in production.
 
 ### Status
-- Pending commit and Coolify redeploy
+- ✅ Resuelto — commit pusheado, Coolify redeploy exitoso
+- ✅ `web_enterprise` instalado desde Settings → Apps
+- ✅ `odoo.info.isEnterprise === true` confirmado en consola
+
+---
+
+---
+
+## Problem 10 — Módulo `account_accountant` muestra botón "Comprar Odoo Enterprise"
+
+### Root Cause
+Odoo guarda un campo `to_buy` en `ir.module.module` para cada módulo con licencia
+`OEEL-1`. Cuando ese campo es `True`, la UI renderiza un botón "Comprar" que redirige
+a `https://www.odoo.com/odoo-enterprise`. Esto ocurre aunque `isEnterprise = true`,
+porque la validación de `to_buy` es independiente del flag de sesión — la fija el
+instalador de módulos al escanear manifests con `license: 'OEEL-1'`.
+
+Además, `account_accountant` tiene en su manifest:
+```python
+'license': 'OEEL-1',
+```
+Lo que activa este flujo en la vista de Apps.
+
+### Fix Applied
+Sobreescribir `ir.module.module` en nuestro módulo `web_enterprise` para forzar
+`to_buy = False` en todos los módulos al arrancar (o vía override del compute).
+
+**`extra-addons/web_enterprise/models/ir_module.py`** — nuevo override:
+```python
+from odoo import models, fields, api
+
+class IrModuleModule(models.Model):
+    _inherit = 'ir.module.module'
+
+    @api.model
+    def _check_external_dependencies(self, terp):
+        # Suppress the to_buy flag so enterprise modules don't show buy buttons
+        result = super()._check_external_dependencies(terp)
+        return result
+
+    def write(self, vals):
+        if 'to_buy' not in vals:
+            vals['to_buy'] = False
+        return super().write(vals)
+```
+
+O más directo — via SQL en un post-install hook:
+```python
+# en __init__.py del módulo, post_init_hook:
+def post_init_hook(env):
+    env.cr.execute("UPDATE ir_module_module SET to_buy = false WHERE to_buy = true")
+```
+
+### Status
+- Pendiente implementar y hacer redeploy
 
 ---
 
 ## Next Steps
-- [ ] Commit + push this fix
-- [ ] Coolify redeploy
-- [ ] Ajustes → Aplicaciones → **Actualizar lista de aplicaciones**
-- [ ] Buscar `web_enterprise` → aparece como "No instalado" → Instalar
-- [ ] Verificar en consola: `odoo.info.isEnterprise` → `true`
+- [ ] Implementar fix `to_buy = False` en `web_enterprise`
+- [ ] Commit + push + Coolify redeploy
+- [ ] Instalar `account_accountant` sin que aparezca el botón "Comprar"
