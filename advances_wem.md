@@ -176,8 +176,77 @@ Dos causas combinadas:
 
 ---
 
+---
+
+## Problem 7 — Docker build falla: `COPY odoo.conf` not found
+
+### Root Cause
+`.dockerignore` excluía explícitamente `odoo.conf`:
+```
+odoo.conf
+```
+El `COPY . .` del Dockerfile no incluía el archivo, y el paso posterior
+`COPY odoo.conf /etc/odoo/odoo.conf` fallaba con "not found" en el build context.
+
+### Fix Applied
+**`.dockerignore`** — eliminada la línea `odoo.conf`.
+
+### Status
+- Commit `c58037f3bf0` pusheado a GitHub (`branch: 18.0`)
+
+---
+
+## Problem 8 — Odoo no genera logs visibles
+
+### Root Cause
+`odoo.conf` tenía `logfile = /opt/odoo/logs/odoo.log` — Odoo escribía a un archivo
+dentro del volumen `odoo_logs`, invisible para `docker compose logs`.
+
+### Fix Applied
+- **`odoo.conf`**: `logfile` eliminado → Odoo escribe a **stdout** → `docker compose logs -f odoo` funciona
+- **`docker-compose.yml`**: volumen `odoo_logs:/opt/odoo/logs` eliminado (ya no necesario)
+- **`Dockerfile`**: `mkdir /opt/odoo/logs` eliminado del `RUN`
+
+### Cómo ver los logs ahora
+```bash
+docker compose up --build -d
+docker compose logs -f odoo       # logs en tiempo real
+docker compose logs --tail=100 odoo  # últimas 100 líneas
+```
+
+### Status
+- Commit `c58037f3bf0` pusheado a GitHub (`branch: 18.0`)
+
+---
+
+---
+
+## Problem 9 — `FileNotFoundError: /opt/odoo/enterprise/extra-addons`
+
+### Root Cause
+`docker-compose.yml` had a bind mount:
+```yaml
+- .:/opt/odoo/enterprise:ro
+```
+This mount overrides the entire `/opt/odoo/enterprise` directory at runtime with whatever the host (Coolify server) has. Coolify's working directory didn't have `extra-addons/` (e.g., shallow clone, or directory mismatch), so Odoo couldn't find the path declared in `odoo.conf`.
+
+### Fix Applied
+**`docker-compose.yml`** — bind mount removed:
+```yaml
+volumes:
+  - odoo_data:/opt/odoo/data
+  # removed: - .:/opt/odoo/enterprise:ro
+```
+`COPY . .` in the Dockerfile already bakes everything (including `extra-addons/`) into the image. The bind mount was redundant and harmful in production.
+
+### Status
+- Pending commit and Coolify redeploy
+
+---
+
 ## Next Steps
-- [ ] Coolify redeploy con commit `c0c1f806c88`
+- [ ] Commit + push this fix
+- [ ] Coolify redeploy
 - [ ] Ajustes → Aplicaciones → **Actualizar lista de aplicaciones**
-- [ ] Buscar `web_enterprise` en la lista → aparece como "No instalado" → Instalar
+- [ ] Buscar `web_enterprise` → aparece como "No instalado" → Instalar
 - [ ] Verificar en consola: `odoo.info.isEnterprise` → `true`
