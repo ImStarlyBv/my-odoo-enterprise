@@ -6,7 +6,9 @@
     'depends': ['web', 'base_setup'],
     'auto_install': True,
     'license': 'LGPL-3',
-    'data': [],
+    'data': [
+        'security/ir.model.access.csv',
+    ],
     'assets': {
         'web.assets_backend': [
             'web_enterprise/static/src/enterprise_theme.scss',
