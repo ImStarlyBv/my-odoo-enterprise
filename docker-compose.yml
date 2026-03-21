@@ -41,6 +41,7 @@ services:
       PASSWORD: odoo
     command:
       - --config=/etc/odoo/odoo.conf
+      - --init=web_enterprise
 
 volumes:
   odoo_db_data:
