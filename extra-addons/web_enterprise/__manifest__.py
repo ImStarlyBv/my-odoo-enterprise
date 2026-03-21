@@ -4,7 +4,8 @@
     'version': '18.0.1.0.0',
     'description': 'Enterprise edition UI — minimal workaround implementation.',
     'depends': ['web', 'base_setup'],
-    'auto_install': True,
+    'installable': True,
+    'auto_install': False,
     'license': 'LGPL-3',
     'data': [
         'security/ir.model.access.csv',
