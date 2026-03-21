@@ -4,7 +4,9 @@ SHELL ["/bin/bash", "-xo", "pipefail", "-c"]
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    VIRTUAL_ENV=/opt/odoo/venv \
+    PATH="/opt/odoo/venv/bin:$PATH"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -57,12 +59,10 @@ WORKDIR /opt/odoo/enterprise
 # Copy source
 COPY . .
 
-# Install Python dependencies
-RUN pip3 install --no-cache-dir --break-system-packages \
-    wheel \
-    setuptools \
-    && pip3 install --no-cache-dir --break-system-packages -r requirements.txt \
-    && pip3 install --no-cache-dir --break-system-packages -e .
+# Create virtualenv and install Python dependencies
+RUN python3 -m venv /opt/odoo/venv \
+    && pip install --no-cache-dir --upgrade pip wheel setuptools \
+    && pip install --no-cache-dir -r requirements.txt
 
 # Create required directories
 RUN mkdir -p /opt/odoo/data /opt/odoo/logs /etc/odoo \
@@ -76,5 +76,5 @@ USER odoo
 
 EXPOSE 8069 8071 8072
 
-ENTRYPOINT ["/opt/odoo/enterprise/odoo-bin"]
+ENTRYPOINT ["/opt/odoo/venv/bin/python3", "/opt/odoo/enterprise/odoo-bin"]
 CMD ["--config=/etc/odoo/odoo.conf"]
