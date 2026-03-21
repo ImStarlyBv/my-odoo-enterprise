@@ -65,7 +65,7 @@ RUN python3 -m venv /opt/odoo/venv \
     && pip install --no-cache-dir -r requirements.txt
 
 # Create required directories
-RUN mkdir -p /opt/odoo/data /opt/odoo/logs /etc/odoo \
+RUN mkdir -p /opt/odoo/data /etc/odoo \
     && chown -R odoo:odoo /opt/odoo
 
 # Copy odoo config

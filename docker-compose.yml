@@ -32,7 +32,6 @@ services:
       - "8072"
     volumes:
       - odoo_data:/opt/odoo/data
-      - odoo_logs:/opt/odoo/logs
       - .:/opt/odoo/enterprise:ro
     environment:
       HOST: db
@@ -45,4 +44,3 @@ services:
 volumes:
   odoo_db_data:
   odoo_data:
-  odoo_logs:

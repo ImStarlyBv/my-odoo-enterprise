@@ -1,0 +1,12 @@
+.git
+.github
+doc
+debian
+Dockerfile
+docker-compose.yml
+progressdep.md
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.DS_Store
+*.log
