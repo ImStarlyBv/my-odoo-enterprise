@@ -49,7 +49,7 @@ It gives the Administrator user access to important invoicing features such as b
     'auto_install': False,
     'post_init_hook': '_account_accountant_post_init',
     'uninstall_hook': "uninstall_hook",
-    'license': 'OEEL-1',
+    'license': 'LGPL-3',
     'assets': {
         'web.assets_backend': [
             'account_accountant/static/src/js/tours/account_accountant.js',
