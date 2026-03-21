@@ -1,0 +1,27 @@
+// Enterprise navbar overrides
+.o_main_navbar {
+    background-color: #1a1a2e;
+    border-bottom: none;
+
+    .o_menu_brand,
+    .o_nav_entry,
+    .o_menu_sections > *,
+    .o_systray_item {
+        color: rgba(255, 255, 255, 0.85);
+
+        &:hover,
+        &:focus {
+            color: #fff;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+    }
+
+    .o_home_menu_toggle {
+        color: rgba(255, 255, 255, 0.85);
+
+        &:hover {
+            color: #fff;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+    }
+}

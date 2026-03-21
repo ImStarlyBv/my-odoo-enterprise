@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-name="web_enterprise.HomeMenu">
+    <div class="o_home_menu">
+        <div class="o_home_menu_search">
+            <input
+                class="o_home_menu_search_input"
+                type="text"
+                placeholder="Search apps..."
+                t-model="state.inputValue"
+                autofocus="autofocus"
+            />
+        </div>
+        <div class="o_home_menu_apps">
+            <t t-foreach="apps" t-as="app" t-key="app.id">
+                <a class="o_app o_menuitem" t-on-click.prevent="() => openApp(app)">
+                    <div class="o_app_icon">
+                        <t t-if="app.webIconData">
+                            <img
+                                class="o_app_icon_img"
+                                t-att-src="'data:image/png;base64,' + app.webIconData"
+                                t-att-alt="app.label"
+                            />
+                        </t>
+                        <t t-else="">
+                            <div class="o_app_icon_placeholder">
+                                <span t-esc="app.label[0]"/>
+                            </div>
+                        </t>
+                    </div>
+                    <div class="o_app_name" t-esc="app.label"/>
+                </a>
+            </t>
+            <t t-if="!apps.length">
+                <div class="o_home_menu_no_result">No app found</div>
+            </t>
+        </div>
+    </div>
+</t>
+
+</templates>
