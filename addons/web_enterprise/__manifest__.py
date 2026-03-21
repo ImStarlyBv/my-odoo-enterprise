@@ -5,7 +5,7 @@
     'description': 'Enterprise edition UI — minimal workaround implementation.',
     'depends': ['web', 'base_setup'],
     'auto_install': True,
-    'license': 'OEEL-1',
+    'license': 'LGPL-3',
     'data': [],
     'assets': {
         'web.assets_backend': [
