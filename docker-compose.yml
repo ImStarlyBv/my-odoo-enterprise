@@ -32,6 +32,7 @@ services:
       - "8072"
     volumes:
       - odoo_data:/opt/odoo/data
+      - /opt/odoo/extra-addons:/opt/odoo/enterprise/extra-addons
     environment:
       HOST: db
       PORT: 5432
