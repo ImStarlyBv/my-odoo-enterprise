@@ -293,12 +293,100 @@ def post_init_hook(env):
     env.cr.execute("UPDATE ir_module_module SET to_buy = false WHERE to_buy = true")
 ```
 
+### Fix Applied
+Tres capas de protección en `extra-addons/web_enterprise/`:
+
+**`models/ir_module.py`** — override de `create()` y `write()`:
+```python
+class IrModuleModule(models.Model):
+    _inherit = 'ir.module.module'
+
+    def create(self, vals):
+        if isinstance(vals, list):
+            for v in vals:
+                v['to_buy'] = False
+        else:
+            vals['to_buy'] = False
+        return super().create(vals)
+
+    def write(self, vals):
+        vals['to_buy'] = False
+        return super().write(vals)
+```
+
+**`__init__.py`** — hooks SQL que limpian la DB:
+```python
+def _clear_to_buy(env):
+    env.cr.execute("UPDATE ir_module_module SET to_buy = false WHERE to_buy = true")
+
+def post_init_hook(env):
+    _clear_to_buy(env)
+
+def post_migrate_hook(env, *args, **kwargs):
+    _clear_to_buy(env)
+```
+
+**`__manifest__.py`** — registra ambos hooks:
+```python
+'post_init_hook': 'post_init_hook',
+'post_migrate_hook': 'post_migrate_hook',
+```
+
+### Por qué el write() solo no era suficiente
+`update_list()` llama a `create()` para registros nuevos de módulos — el override
+de `write()` solo cubría actualizaciones. El botón duplicado aparecía porque
+`to_buy=True` se guardaba en el `create()` inicial del módulo y persistía.
+
+Las tres capas cubren:
+1. `create()` — módulos nuevos escaneados por `update_list()`
+2. `write()` — actualizaciones de módulos existentes
+3. `post_migrate_hook` SQL — limpieza total en cada redeploy/upgrade del módulo
+
 ### Status
-- Pendiente implementar y hacer redeploy
+- ✅ Commits `a850f546068` y `558bf36adb9` pusheados a GitHub (`branch: 18.0`)
+- ✅ Botón duplicado eliminado — fix SQL ejecutado directamente en la DB:
+  ```bash
+  docker exec -it odoo18_db psql -U odoo -d xqt-solutions
+  UPDATE ir_module_module SET to_buy = false WHERE to_buy = true;
+  ```
+- ✅ Solo aparece un botón "Actualizar" en el módulo Contabilidad
+
+---
+
+---
+
+## Problem 11 — `account_accountant` no existe en el repo / sin botón "Instalar"
+
+### Root Cause
+El módulo `account_accountant` (Enterprise oficial de Odoo) **no está presente** en
+`addons/`. El repo contiene el módulo community `account` y variantes, pero no el
+módulo Enterprise de contabilidad avanzada. Por eso en la UI aparece "Actualizar"
+(registro en DB) pero no "Instalar" (el código no existe en disco).
+
+### Solución Elegida
+Usar **`om_account_accountant`** — implementación community/OCA para Odoo 18:
+- Repo: `github.com/vappelgren/om_account_accountant`
+- Módulos incluidos:
+  - `om_account_accountant` — core contabilidad
+  - `om_account_asset` — activos fijos
+  - `om_account_budget` — presupuestos
+  - `om_account_daily_reports` — reportes diarios
+  - `om_account_followup` — seguimiento de pagos
+  - `om_fiscal_year` — año fiscal
+  - `om_recurring_payments` — pagos recurrentes
+
+### Plan
+1. Clonar el repo externamente
+2. Copiar módulos deseados a `extra-addons/`
+3. Commit + push + Coolify redeploy
+4. Instalar desde Apps
+
+### Status
+- Pendiente implementar
 
 ---
 
 ## Next Steps
-- [ ] Implementar fix `to_buy = False` en `web_enterprise`
+- [ ] Clonar `vappelgren/om_account_accountant` y copiar módulos a `extra-addons/`
 - [ ] Commit + push + Coolify redeploy
-- [ ] Instalar `account_accountant` sin que aparezca el botón "Comprar"
+- [ ] Apps → Actualizar lista → Instalar `om_account_accountant`
