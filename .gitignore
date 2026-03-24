@@ -1,25 +1,33 @@
 # sphinx build directories
 _build/
 
-# dotfiles
+# dotfiles (La regla genérica '.*' bloquea todo. Las excepciones con '!' son vitales)
 .*
 !.gitignore
 !.github
 !.mailmap
+!.dockerignore  # <-- CRÍTICO: Si Git ignora esto, Coolify explotará copiando basura.
+
 # compiled python files
 *.py[co]
 __pycache__/
+
 # setup.py egg_info
 *.egg-info
+
 # emacs backup files
 *~
+
 # hg stuff
 *.orig
 status
+
 # odoo filestore
 odoo/filestore
+
 # maintenance migration scripts
 odoo/addons/base/maintenance
+
 # window installation config file
 /odoo.conf
 
@@ -49,3 +57,10 @@ package.json
 /man/
 /share/
 /src/
+
+# =========================================================================
+# REGLAS PERSONALIZADAS DEL PROYECTO
+# =========================================================================
+# Excepción explícita para asegurar que el código de Odoo 15/18 suba al repo
+!extra-addons/
+!extra-addons/**
