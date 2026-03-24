@@ -13,7 +13,7 @@ services:
     expose:
       - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      test: [ "CMD-SHELL", "pg_isready -U odoo" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +32,6 @@ services:
       - "8072"
     volumes:
       - odoo_data:/opt/odoo/data
-      - /opt/odoo/extra-addons:/opt/odoo/enterprise/extra-addons
     environment:
       HOST: db
       PORT: 5432
