@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="point_of_sale.OrderReceipt" t-inherit="point_of_sale.OrderReceipt" t-inherit-mode="extension">
+
+        <!-- Inject NCF and partner info after ReceiptHeader -->
+        <xpath expr="//ReceiptHeader" position="after">
+            <t t-if="props.data.l10n_do_fiscal_journal">
+                <div class="pos-receipt-font-75" t-if="props.data.partner">
+                    <br/>
+                    <div>
+                        Customer: <t t-esc="props.data.partner.name"/>
+                    </div>
+                    <div t-if="props.data.partner.vat">
+                        RNC / Cedula: <t t-esc="props.data.partner.vat"/>
+                    </div>
+                    <div t-if="props.data.partner.street">
+                        <t t-esc="props.data.partner.street"/>
+                        <t t-if="props.data.partner.street2" t-esc="', ' + props.data.partner.street2"/>
+                    </div>
+                    <div t-if="props.data.partner.city">
+                        <t t-esc="props.data.partner.city"/>
+                    </div>
+                    <div t-if="props.data.partner.zip">
+                        <t t-esc="props.data.partner.zip"/>
+                    </div>
+                </div>
+
+                <div t-if="props.data.ncf">
+                    <br/>
+                    <div class="pos-receipt-contact">
+                        Authorized by DGII
+                    </div>
+                    <br/>
+                    <div class="pos-receipt-font-75">
+                        <div><t t-esc="props.data.date"/></div>
+                        <div>NCF: <t t-esc="props.data.ncf"/></div>
+                        <div t-if="props.data.ncf_expiration_date">
+                            Expiration date NCF: <t t-esc="props.data.ncf_expiration_date"/>
+                        </div>
+                        <div t-if="props.data.ncf_origin_out">
+                            Affect: <t t-esc="props.data.ncf_origin_out"/>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </xpath>
+
+        <!-- Inject fiscal type name before orderlines -->
+        <xpath expr="//OrderWidget" position="before">
+            <t t-if="props.data.l10n_do_fiscal_journal and props.data.ncf">
+                <div class="pos-receipt-fiscal-type-name">
+                    <t t-esc="props.data.fiscal_type.name"/>
+                </div>
+                <div class="do-pos-receipt-titles">
+                    <div>DESCRIPTION</div>
+                    <div class="text-end">ITBIS</div>
+                    <div class="text-end">VALUE</div>
+                </div>
+            </t>
+        </xpath>
+
+    </t>
+
+</templates>

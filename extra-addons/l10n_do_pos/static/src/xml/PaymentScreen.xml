@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Inject SetFiscalTypeButton and hide Invoice button in fiscal journal mode -->
+    <t t-name="point_of_sale.PaymentScreenButtons" t-inherit="point_of_sale.PaymentScreenButtons" t-inherit-mode="extension">
+        <xpath expr="//button[hasclass('partner-button')]" position="after">
+            <t t-if="pos.config.l10n_do_fiscal_journal">
+                <SetFiscalTypeButton/>
+            </t>
+        </xpath>
+        <xpath expr="//button[hasclass('js_invoice')]" position="attributes">
+            <attribute name="t-if">!pos.config.l10n_do_fiscal_journal</attribute>
+        </xpath>
+    </t>
+
+    <!-- Disable payment methods container in credit note mode -->
+    <t t-name="point_of_sale.PaymentScreenMethods" t-inherit="point_of_sale.PaymentScreenMethods" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('paymentmethods-container')]" position="attributes">
+            <attribute name="t-attf-class">#{pos.isCreditNoteMode() ? 'no-clickeable' : ''}</attribute>
+        </xpath>
+    </t>
+
+</templates>

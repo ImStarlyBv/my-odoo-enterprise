@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="point_of_sale.TicketScreen" t-inherit="point_of_sale.TicketScreen" t-inherit-mode="extension">
+        <!-- Add NCF column to header (desktop only) -->
+        <xpath expr="//div[hasclass('header-row')]/div[1]" position="after">
+            <t t-if="pos.config.l10n_do_fiscal_journal">
+                <div class="col wide p-2">NCF</div>
+            </t>
+        </xpath>
+
+        <!-- Add NCF value to each desktop order row -->
+        <xpath expr="//div[hasclass('order-row')]/div[1]" position="after">
+            <t t-if="pos.config.l10n_do_fiscal_journal">
+                <div class="col wide p-2">
+                    <div><t t-esc="order.ncf"/></div>
+                </div>
+            </t>
+        </xpath>
+
+        <!-- Add "Return all products" button next to the Back button -->
+        <xpath expr="//div[hasclass('buttons')]" position="inside">
+            <t t-if="pos.config.l10n_do_fiscal_journal">
+                <button class="btn btn-light btn-lg text-nowrap" t-on-click="_returnAllOrder">
+                    <i class="fa fa-bars me-1"/>
+                    <span t-if="!ui.isSmall">Return all</span>
+                </button>
+            </t>
+        </xpath>
+    </t>
+
+</templates>
