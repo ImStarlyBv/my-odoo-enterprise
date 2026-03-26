@@ -325,7 +325,7 @@
         <field name="name">Reports</field>
         <field name="res_model">dgii.reports</field>
 
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
         <field name="search_view_id" ref="dgii_report_search_view"/>
         <field name="help" type="html">
             <p class="oe_view_nocontent_create"></p>

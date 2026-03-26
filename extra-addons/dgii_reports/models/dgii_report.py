@@ -2012,7 +2012,7 @@ class DgiiReport(models.Model):
     def get_606_tree_view(self):
         return {
             'name': '606',
-            'view_mode': 'tree',
+            'view_mode': 'list',
             'res_model': 'dgii.reports.purchase.line',
             'type': 'ir.actions.act_window',
             'view_id':
@@ -2023,7 +2023,7 @@ class DgiiReport(models.Model):
     def get_607_tree_view(self):
         return {
             'name': '607',
-            'view_mode': 'tree',
+            'view_mode': 'list',
             'res_model': 'dgii.reports.sale.line',
             'type': 'ir.actions.act_window',
             'view_id':
@@ -2034,7 +2034,7 @@ class DgiiReport(models.Model):
     def get_608_tree_view(self):
         return {
             'name': '608',
-            'view_mode': 'tree',
+            'view_mode': 'list',
             'res_model': 'dgii.reports.cancel.line',
             'type': 'ir.actions.act_window',
             'view_id':
@@ -2045,7 +2045,7 @@ class DgiiReport(models.Model):
     def get_609_tree_view(self):
         return {
             'name': '609',
-            'view_mode': 'tree',
+            'view_mode': 'list',
             'res_model': 'dgii.reports.exterior.line',
             'type': 'ir.actions.act_window',
             'view_id':
