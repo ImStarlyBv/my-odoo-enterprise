@@ -562,7 +562,6 @@ class AccountInvoice(models.Model):
         
         
 
-    @api.returns("self")
     def refund(self, invoice_date=None, date=None, description=None, journal_id=None):
 
         context = dict(self._context or {})

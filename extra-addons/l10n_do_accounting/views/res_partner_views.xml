@@ -6,18 +6,17 @@
         <field name="inherit_id" ref="base.view_partner_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='vat']" position="attributes">
-                <attribute name="attrs">{'invisible': [('country_id', '=', %(base.do)s)]}</attribute>
+                <attribute name="invisible">country_id == %(base.do)s</attribute>
             </xpath>
             <xpath expr="//field[@name='vat']" position="after">
                 <field name="is_fiscal_info_required" invisible="1"/>
-                <field name="vat" placeholder="EXP.... NNNNNNNNN or NNNNNNNNNNN" string="RNC / Cedula" attrs="{
-                    'readonly': [('parent_id','!=',False)],
-                    'invisible': [('country_id', '!=', %(base.do)s)],
-                    'required': [('is_fiscal_info_required','=',True)]
-                }"/>
+                <field name="vat" placeholder="EXP.... NNNNNNNNN or NNNNNNNNNNN" string="RNC / Cedula"
+                    readonly="parent_id"
+                    invisible="country_id != %(base.do)s"
+                    required="is_fiscal_info_required"/>
             </xpath>
             <group name="sale" position ="inside">
-                <field name="sale_fiscal_type_id" attrs="{'readonly': [('parent_id','!=', False)]}" />
+                <field name="sale_fiscal_type_id" readonly="parent_id"/>
             </group>
             <group name="purchase" position ="inside">
                 <field name="expense_type"/>
