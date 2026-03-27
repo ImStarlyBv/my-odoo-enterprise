@@ -64,7 +64,7 @@
                 <t t-call="l10n_do_accounting.fiscal_info"/>
             </t>
         </xpath>
-        <xpath expr="//li[@t-if='forced_vat']" position="after">
+        <xpath expr="//ul[@name='company_address_list']" position="inside">
             <t t-if="l10n_do_fiscal_invoice">
                 <li t-if="not forced_vat and company.vat" class="first-page">
                     <strong>
@@ -96,7 +96,7 @@
                 </div>        
             </t>
         </xpath> 
-        <xpath expr="//div[hasclass('o_boxed_header')][1]" position="after">
+        <xpath expr="//h2[@t-out='layout_document_title']" position="before">
             <t t-if="l10n_do_fiscal_invoice">
                 <t t-call="l10n_do_accounting.complete_fiscal_info"/>
             </t>
@@ -119,7 +119,7 @@
                 </ul>
             </div>        
         </xpath>
-        <xpath expr="//div[hasclass('o_clean_header')]" position="after">
+        <xpath expr="//h2[@t-out='layout_document_title']" position="before">
             <t t-if="l10n_do_fiscal_invoice">
                 <t t-call="l10n_do_accounting.complete_fiscal_info"/>
             </t>
@@ -138,10 +138,10 @@
     </template>
 
     <template id="external_layout_striped_inherited" inherit_id="web.external_layout_striped">
-        <xpath expr="//div[hasclass('company_address')]" position="attributes">
+        <xpath expr="//div[@name='company_address']" position="attributes">
             <attribute name="t-if">not l10n_do_fiscal_invoice</attribute>
         </xpath>
-        <xpath expr="//div[hasclass('company_address')]" position="after">
+        <xpath expr="//div[@name='company_address']" position="after">
             <div class="float-start company_address not-first-page" t-if="l10n_do_fiscal_invoice">
                 <ul class="list-unstyled">
                     <li t-if="company.is_company_details_empty"><t t-esc="company.partner_id" t-options='{"widget": "contact", "fields": ["address", "name"], "no_marker": true}'/></li>
@@ -153,7 +153,7 @@
                 </ul>
             </div>
         </xpath>
-        <xpath expr="//div[hasclass('o_background_header')][1]" position="after">
+        <xpath expr="//h2[@t-out='layout_document_title']" position="before">
             <t t-if="l10n_do_fiscal_invoice">
                 <t t-call="l10n_do_accounting.complete_fiscal_info"/>
             </t>
