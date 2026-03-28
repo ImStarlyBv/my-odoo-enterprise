@@ -10,6 +10,9 @@
                     <button name="generate_report" string="Generate Statements" type="object" class="oe_highlight" invisible="state != 'draft'"/>
                     <button name="generate_report" string="Generate Statements" type="object" invisible="state != 'generated'"/>
                     <button name="state_sent" string="Set as sent" type="object" class="oe_highlight" invisible="state != 'generated'"/>
+                    <button name="generate_report" string="Generate Statements" type="object" class="oe_highlight" invisible="state != 'draft'"/>
+                    <button name="generate_report" string="Generate Statements" type="object" invisible="state != 'generated'"/>
+                    <button name="state_sent" string="Set as sent" type="object" class="oe_highlight" invisible="state != 'generated'"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,generated,sent"/>
                 </header>
                 <sheet>
@@ -29,7 +32,7 @@
                     <div invisible="not previous_report_pending">
                         <field name="previous_report_pending" invisible="1"/>
                         <div class="alert alert-warning info_icon" role="alert">
-                            <span class="fa fa-lightbulb-o fa-lg" title="Info" aria-label="Info"/>
+                            <span class="fa fa-lightbulb fa-lg" title="Info" aria-label="Info"/>
                             <p>The previous report is still not marked as sent.</p>
                             <p>Not setting a report as sent may throw inconsistencies regarding invoices withholding dates.</p>
                         </div>
@@ -132,7 +135,9 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
+                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
+                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
                                         <field name="dgii_report_id" invisible="1"/>
@@ -154,7 +159,9 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
+                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
+                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
                                         <field name="dgii_report_id" invisible="1"/>
@@ -169,6 +176,7 @@
                                     <field name="sequence" string="Box"/>
                                     <field name="name"/>
                                     <field name="local_purchase" string="TOTAL INVOICED" invisible="sequence in ()"/>
+                                    <field name="local_purchase" string="TOTAL INVOICED" invisible="sequence in ()"/>
                                     <field name="amount" readonly="1" />
                                     <field name="currency_id" invisible="1"/>
                                     <field name="dgii_report_id" invisible="1"/>
@@ -177,7 +185,10 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
+                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
+                                        <field name="local_purchase" string="TOTAL INVOICED" invisible="display_type != False"/>
+                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="local_purchase" string="TOTAL INVOICED" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
@@ -200,7 +211,9 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
+                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
+                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
                                         <field name="dgii_report_id" invisible="1"/>
@@ -219,6 +232,11 @@
                                     <field name="imports" readonly="1" invisible="sequence == 54" />
                                     <field name="amount" readonly="1" string="TOTAL" invisible="sequence == 54" />
                                     <field name="coefficient" style="max-width: 45px !important;" invisible="sequence != 54" />
+                                    <field name="local_purchase" readonly="1" invisible="sequence == 54" />
+                                    <field name="services" readonly="1" invisible="sequence == 54" />
+                                    <field name="imports" readonly="1" invisible="sequence == 54" />
+                                    <field name="amount" readonly="1" string="TOTAL" invisible="sequence == 54" />
+                                    <field name="coefficient" style="max-width: 45px !important;" invisible="sequence != 54" />
                                     <field name="currency_id" invisible="1"/>
                                     <field name="dgii_report_id" invisible="1"/>
                                     <field name="display_type" invisible="1"/>
@@ -226,7 +244,13 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
+                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
+                                        <field name="local_purchase" invisible="display_type != False or sequence == 54"/>
+                                        <field name="services" invisible="display_type != False or sequence == 54"/>
+                                        <field name="imports" invisible="display_type != False or sequence == 54"/>
+                                        <field name="amount" string="TOTAL" invisible="display_type != False or sequence == 54"/>
+                                        <field name="coefficient" invisible="display_type != False or sequence != 54" widget="percentage" truncate="4"/>
                                         <field name="local_purchase" invisible="display_type != False or sequence == 54"/>
                                         <field name="services" invisible="display_type != False or sequence == 54"/>
                                         <field name="imports" invisible="display_type != False or sequence == 54"/>
@@ -254,7 +278,9 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
+                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
+                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
                                         <field name="dgii_report_id" invisible="1"/>
@@ -471,8 +497,8 @@
                 <filter string="Physical person" name="identification_type" domain="[('identification_type','=', '2')]"/>
                 <filter string="Legal person" name="identification_type" domain="[('identification_type','=', '1')]"/>
                 <separator/>
-                <filter string="Paid" name="paid" domain="[('invoice_id.state','=','paid')]"/>
-                <filter string="Open" name="open" domain="[('invoice_id.state','!=','paid')]"/>
+                <filter string="Paid" name="paid" domain="[('invoice_id.payment_state','in',['paid', 'in_payment'])]"/>
+                <filter string="Open" name="open" domain="[('invoice_id.payment_state','not in',['paid', 'in_payment'])]"/>
                 <filter string="ITBIS withholding" name="withholding" domain="[('withholded_itbis', '!=', 0)]"/>
                 <filter string="ISR withholding" name="withholding" domain="[('income_withholding', '!=', 0)]"/>
                 <!-- Groups -->
@@ -501,8 +527,8 @@
                 <filter string="Physical person" name="identification_type" domain="[('identification_type','=', '2')]"/>
                 <filter string="Legal person" name="identification_type" domain="[('identification_type','=', '1')]"/>
                 <separator/>
-                <filter string="Paid" name="paid" domain="[('invoice_id.state','=','paid')]"/>
-                <filter string="Open" name="open" domain="[('invoice_id.state','!=','paid')]"/>
+                <filter string="Paid" name="paid" domain="[('invoice_id.payment_state','in',['paid', 'in_payment'])]"/>
+                <filter string="Open" name="open" domain="[('invoice_id.payment_state','not in',['paid', 'in_payment'])]"/>
                 <filter string="ITBIS withholding" name="withholding" domain="[('third_withheld_itbis', '!=', 0)]"/>
                 <filter string="ISR withholding" name="withholding" domain="[('third_income_withholding', '!=', 0)]"/>
                 <!-- Groups -->
@@ -542,8 +568,8 @@
                 <field name="tax_id"/>
                 <field name="doc_number"/>
                 <!-- Filters -->
-                <filter string="Paid" name="paid" domain="[('invoice_id.state','=','paid')]"/>
-                <filter string="Open" name="open" domain="[('invoice_id.state','!=','paid')]"/>
+                <filter string="Paid" name="paid" domain="[('invoice_id.payment_state','in',['paid', 'in_payment'])]"/>
+                <filter string="Open" name="open" domain="[('invoice_id.payment_state','not in',['paid', 'in_payment'])]"/>
                 <filter string="Withholded ISR" name="withholding" domain="[('withholded_isr', '!=', 0)]"/>
             </search>
         </field>
