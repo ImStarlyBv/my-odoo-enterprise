@@ -13,7 +13,7 @@
                     <div class="o_setting_right_pane">
                             <label string="Default customer" for="pos_partner_id" class="col-lg-3 o_light_label" options="{'no_create': True}"/>
                             <div>
-                                <field name="pos_partner_id"  attrs="{'required': [('l10n_do_fiscal_journal', '=', True)]}"/>
+                                <field name="pos_partner_id" required="l10n_do_fiscal_journal"/>
                             </div>
                     </div>
                 </div>
@@ -29,7 +29,7 @@
                             </div>
                             <div class="content-group mt16 o_light_label">
                                 <field name="l10n_do_type_limit_order_history" colspan="4" nolabel="1" widget="radio"/>
-                                <div class="row" attrs="{'invisible': [('l10n_do_type_limit_order_history', '!=', 'days')]}">
+                                <div class="row" invisible="l10n_do_type_limit_order_history != 'days'">
                                     <label for="l10n_do_type_limit_order_history_days" string="Max quantity days" class="col-lg-3 o_light_label"/>
                                     <field name="l10n_do_type_limit_order_history_days"  class="oe_inline"/>
                                 </div>
