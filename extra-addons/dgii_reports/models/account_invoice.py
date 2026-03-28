@@ -9,7 +9,7 @@ class InvoiceServiceTypeDetail(models.Model):
     _description = "Invoice Service Type Detail"
 
     name = fields.Char()
-    code = fields.Char(size=2)
+    code = fields.Char()
     parent_code = fields.Char()
 
     _sql_constraints = [

@@ -59,7 +59,7 @@
         <field name="model">account.move</field>
         <field name="inherit_id" ref="account.view_invoice_tree"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='payment_state']" position="after">
+            <xpath expr="//field[@name='status_in_payment']" position="after">
                 <field name="fiscal_status" widget="state_selection" readonly="1" groups="account.group_account_user"/>
             </xpath>
             

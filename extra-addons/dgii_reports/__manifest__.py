@@ -49,6 +49,4 @@
         ]
     },
 
-    'post_init_hook': 'update_taxes'
-
 }

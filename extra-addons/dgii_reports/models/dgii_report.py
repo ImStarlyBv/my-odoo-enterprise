@@ -37,8 +37,8 @@ class DgiiReport(models.Model):
                 report.previous_report_pending = False
 
     name = fields.Char(
-        string='Period', 
-        required=True, size=7
+        string='Period',
+        required=True
     )
     state = fields.Selection(
         string="state",
@@ -2065,11 +2065,11 @@ class DgiiReportPurchaseLine(models.Model):
     )
     line = fields.Integer()
 
-    rnc_cedula = fields.Char(size=11)
-    identification_type = fields.Char(size=1)
-    expense_type = fields.Char(size=2)
-    fiscal_invoice_number = fields.Char(size=19)
-    modified_invoice_number = fields.Char(size=19)
+    rnc_cedula = fields.Char()
+    identification_type = fields.Char()
+    expense_type = fields.Char()
+    fiscal_invoice_number = fields.Char()
+    modified_invoice_number = fields.Char()
     invoice_date = fields.Date()
     payment_date = fields.Date()
     service_total_amount = fields.Float()
@@ -2114,10 +2114,10 @@ class DgiiReportSaleLine(models.Model):
         index=True
     )
     line = fields.Integer()
-    rnc_cedula = fields.Char(size=11)
-    identification_type = fields.Char(size=1)
-    fiscal_invoice_number = fields.Char(size=19)
-    modified_invoice_number = fields.Char(size=19)
+    rnc_cedula = fields.Char()
+    identification_type = fields.Char()
+    fiscal_invoice_number = fields.Char()
+    modified_invoice_number = fields.Char()
     income_type = fields.Char()
     invoice_date = fields.Date()
     withholding_date = fields.Date()
@@ -2166,9 +2166,9 @@ class DgiiCancelReportLine(models.Model):
     )
     line = fields.Integer()
 
-    fiscal_invoice_number = fields.Char(size=19)
+    fiscal_invoice_number = fields.Char()
     invoice_date = fields.Date()
-    annulation_type = fields.Char(size=2)
+    annulation_type = fields.Char()
 
     invoice_partner_id = fields.Many2one('res.partner')
     invoice_id = fields.Many2one('account.move')
@@ -2199,8 +2199,8 @@ class DgiiExteriorReportLine(models.Model):
     tax_id_type = fields.Integer()
     tax_id = fields.Char()
     country_code = fields.Char()
-    purchased_service_type = fields.Char(size=2)
-    service_type_detail = fields.Char(size=2)
+    purchased_service_type = fields.Char()
+    service_type_detail = fields.Char()
     related_part = fields.Integer()
     doc_number = fields.Char()
     doc_date = fields.Date()

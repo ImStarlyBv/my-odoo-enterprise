@@ -10,9 +10,6 @@
                     <button name="generate_report" string="Generate Statements" type="object" class="oe_highlight" invisible="state != 'draft'"/>
                     <button name="generate_report" string="Generate Statements" type="object" invisible="state != 'generated'"/>
                     <button name="state_sent" string="Set as sent" type="object" class="oe_highlight" invisible="state != 'generated'"/>
-                    <button name="generate_report" string="Generate Statements" type="object" class="oe_highlight" invisible="state != 'draft'"/>
-                    <button name="generate_report" string="Generate Statements" type="object" invisible="state != 'generated'"/>
-                    <button name="state_sent" string="Set as sent" type="object" class="oe_highlight" invisible="state != 'generated'"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,generated,sent"/>
                 </header>
                 <sheet>
@@ -135,9 +132,7 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
-                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
-                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
                                         <field name="dgii_report_id" invisible="1"/>
@@ -159,9 +154,7 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
-                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
-                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
                                         <field name="dgii_report_id" invisible="1"/>
@@ -176,7 +169,6 @@
                                     <field name="sequence" string="Box"/>
                                     <field name="name"/>
                                     <field name="local_purchase" string="TOTAL INVOICED" invisible="sequence in ()"/>
-                                    <field name="local_purchase" string="TOTAL INVOICED" invisible="sequence in ()"/>
                                     <field name="amount" readonly="1" />
                                     <field name="currency_id" invisible="1"/>
                                     <field name="dgii_report_id" invisible="1"/>
@@ -185,10 +177,7 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
-                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
-                                        <field name="local_purchase" string="TOTAL INVOICED" invisible="display_type != False"/>
-                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="local_purchase" string="TOTAL INVOICED" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
@@ -211,9 +200,7 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
-                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
-                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
                                         <field name="dgii_report_id" invisible="1"/>
@@ -232,11 +219,6 @@
                                     <field name="imports" readonly="1" invisible="sequence == 54" />
                                     <field name="amount" readonly="1" string="TOTAL" invisible="sequence == 54" />
                                     <field name="coefficient" style="max-width: 45px !important;" invisible="sequence != 54" />
-                                    <field name="local_purchase" readonly="1" invisible="sequence == 54" />
-                                    <field name="services" readonly="1" invisible="sequence == 54" />
-                                    <field name="imports" readonly="1" invisible="sequence == 54" />
-                                    <field name="amount" readonly="1" string="TOTAL" invisible="sequence == 54" />
-                                    <field name="coefficient" style="max-width: 45px !important;" invisible="sequence != 54" />
                                     <field name="currency_id" invisible="1"/>
                                     <field name="dgii_report_id" invisible="1"/>
                                     <field name="display_type" invisible="1"/>
@@ -244,13 +226,7 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
-                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
-                                        <field name="local_purchase" invisible="display_type != False or sequence == 54"/>
-                                        <field name="services" invisible="display_type != False or sequence == 54"/>
-                                        <field name="imports" invisible="display_type != False or sequence == 54"/>
-                                        <field name="amount" string="TOTAL" invisible="display_type != False or sequence == 54"/>
-                                        <field name="coefficient" invisible="display_type != False or sequence != 54" widget="percentage" truncate="4"/>
                                         <field name="local_purchase" invisible="display_type != False or sequence == 54"/>
                                         <field name="services" invisible="display_type != False or sequence == 54"/>
                                         <field name="imports" invisible="display_type != False or sequence == 54"/>
@@ -278,9 +254,7 @@
                                 <form>
                                     <group>
                                         <field name="sequence" string="Box" invisible="display_type != False"/>
-                                        <field name="sequence" string="Box" invisible="display_type != False"/>
                                         <field name="name"/>
-                                        <field name="amount" invisible="display_type != False"/>
                                         <field name="amount" invisible="display_type != False"/>
                                         <field name="currency_id" invisible="1"/>
                                         <field name="dgii_report_id" invisible="1"/>
