@@ -164,7 +164,7 @@ class PosOrder(models.Model):
             if pos_config.l10n_do_type_limit_order_history == 'days':
                 default_domain.insert(3, '&')
                 default_domain.insert(4,
-                    ('create_date', '>=', fields.Datetime.to_string(fields.Datetime.now() - timedelta(days=pos_config.l10n_do_type_limit_order_history_days))))
+                    ('create_date', '>=', fields.Datetime.now() - timedelta(days=pos_config.l10n_do_type_limit_order_history_days)))
 
             real_domain = AND([domain, default_domain])
             ids = self.search(AND([domain, default_domain]), limit=limit, offset=offset).ids

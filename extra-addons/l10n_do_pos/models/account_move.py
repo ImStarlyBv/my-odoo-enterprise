@@ -8,7 +8,7 @@ class AccountMove(models.Model):
         for move in self:
             # Check if the move is an invoice and linked to a POS session
             if move.move_type in ('out_invoice', 'out_refund'):
-                pos_orders = self.env['pos.order'].search([('account_move', '=', move.id)])
+                pos_orders = self.env['pos.order'].search([('account_move_ids', 'in', [move.id])])
                 if pos_orders:
                     # Filter sessions that are open
                     open_sessions = pos_orders.mapped('session_id').filtered(lambda s: s.state == 'opened')

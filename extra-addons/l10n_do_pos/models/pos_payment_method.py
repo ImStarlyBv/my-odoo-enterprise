@@ -1,4 +1,5 @@
 from odoo import api, fields, models, _
+from odoo.exceptions import ValidationError
 
 class PosPaymentMethod(models.Model):
     _inherit = 'pos.payment.method'
@@ -19,9 +20,9 @@ class PosPaymentMethod(models.Model):
         for record in self:
             if record.is_credit_note:
                 if not record.split_transactions:
-                    raise models.ValidationError(
+                    raise ValidationError(
                         _('Identify customer must be true if is credit note is true.'))
 
                 if record.journal_id:
-                    raise models.ValidationError(
+                    raise ValidationError(
                         _('Journal must be empty if is credit note is true.'))
