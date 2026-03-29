@@ -15,8 +15,5 @@
             <field name="is_credit_note">True</field>
         </record>
 
-        <record model="pos.config" id="point_of_sale.pos_config_main">
-            <field name="payment_method_ids" eval="[(4, ref('credit_note'))]"/>
-        </record>
     </data>
 </odoo>

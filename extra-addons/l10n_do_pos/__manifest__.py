@@ -26,5 +26,6 @@
             'l10n_do_pos/static/src/xml/**/*.xml',
         ],
     },
+    'post_init_hook': '_l10n_do_pos_post_init',
     'installable': True,
 }
