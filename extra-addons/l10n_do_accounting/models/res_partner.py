@@ -1,143 +1,137 @@
 from odoo import models, fields, api, _
+from odoo.exceptions import AccessError
 
 
 class Partner(models.Model):
     _inherit = "res.partner"
 
-    sale_fiscal_type_id = fields.Many2one(
-        comodel_name="account.fiscal.type",
-        string="Sale Fiscal Type",
-        domain=[("type", "=", "out_invoice")],
-        compute='_compute_sale_fiscal_type_id',
-        inverse='_inverse_sale_fiscal_type_id',
+    def _get_l10n_do_dgii_payer_types_selection(self):
+        """Return the list of payer types needed in invoices to clasify accordingly to
+        DGII requirements."""
+        return [
+            ("taxpayer", _("Fiscal Tax Payer")),
+            ("non_payer", _("Non Tax Payer")),
+            ("nonprofit", _("Nonprofit Organization")),
+            ("special", _("special from Tax Paying")),
+            ("governmental", _("Governmental")),
+            ("foreigner", _("Foreigner")),
+        ]
+
+    def _get_l10n_do_expense_type(self):
+        """Return the list of expenses needed in invoices to clasify accordingly to
+        DGII requirements."""
+        return [
+            ("01", _("01 - Personal")),
+            ("02", _("02 - Work, Supplies and Services")),
+            ("03", _("03 - Leasing")),
+            ("04", _("04 - Fixed Assets")),
+            ("05", _("05 - Representation")),
+            ("06", _("06 - Admitted Deductions")),
+            ("07", _("07 - Financial Expenses")),
+            ("08", _("08 - Extraordinary Expenses")),
+            ("09", _("09 - Cost & Expenses part of Sales")),
+            ("10", _("10 - Assets Acquisitions")),
+            ("11", _("11 - Insurance Expenses")),
+        ]
+
+    l10n_do_dgii_tax_payer_type = fields.Selection(
+        selection="_get_l10n_do_dgii_payer_types_selection",
+        compute="_compute_l10n_do_dgii_payer_type",
+        inverse="_inverse_l10n_do_dgii_tax_payer_type",
+        string="Taxpayer Type",
         index=True,
         store=True,
     )
-    purchase_fiscal_type_id = fields.Many2one(
-        comodel_name="account.fiscal.type",
-        string="Purchase Fiscal Type",
-        domain=[("type", "=", "in_invoice")],
-    )
-    expense_type = fields.Selection(
-        selection=[
-            ("01", "01 - Gastos de Personal"),
-            ("02", "02 - Gastos por Trabajo, Suministros y Servicios"),
-            ("03", "03 - Arrendamientos"),
-            ("04", "04 - Gastos de Activos Fijos"),
-            ("05", u"05 - Gastos de Representación"),
-            ("06", "06 - Otras Deducciones Admitidas"),
-            ("07", "07 - Gastos Financieros"),
-            ("08", "08 - Gastos Extraordinarios"),
-            ("09", "09 - Compras y Gastos que forman parte del Costo de Venta"),
-            ("10", "10 - Adquisiciones de Activos"),
-            ("11", "11 - Gastos de Seguro"),
-        ],
-        string="Expense Type",
-    )
-    is_fiscal_info_required = fields.Boolean(
-        compute="_compute_is_fiscal_info_required"
+    l10n_do_expense_type = fields.Selection(
+        selection="_get_l10n_do_expense_type",
+        string="Cost & Expense Type",
+        store=True,
     )
     country_id = fields.Many2one(
-        comodel_name='res.country',
-        string='Country',
-        ondelete='restrict',
-        default=lambda self: self.env.ref('base.do')
+        default=lambda self: self.env.ref("base.do")
+        if self.env.user.company_id.country_id == self.env.ref("base.do")
+        else False
     )
 
-    @api.depends('sale_fiscal_type_id', 'country_id', 'parent_id')
-    def _compute_is_fiscal_info_required(self):
+    def _check_l10n_do_fiscal_fields(self, vals):
+        if not self or self.parent_id:
+            # Do not perform any check because child contacts
+            # have readonly fiscal field. This also allows set
+            # contacts parent, even if this changes any of its
+            # fiscal fields.
+            return
+
+        fiscal_fields = [
+            field
+            for field in ["name", "vat", "country_id"]  # l10n_do_dgii_tax_payer_type ?
+            if field in vals
+        ]
+        if (
+            fiscal_fields
+            and not self.env.user.has_group(
+                "l10n_do_accounting.group_l10n_do_edit_fiscal_partner"
+            )
+            and self.env["account.move"]
+            .sudo()
+            .search(
+                [
+                    ("l10n_latam_use_documents", "=", True),
+                    ("country_code", "=", "DO"),
+                    ("commercial_partner_id", "=", self.id),
+                    ("state", "=", "posted"),
+                ],
+                limit=1,
+            )
+        ):
+            raise AccessError(
+                _(
+                    "You are not allowed to modify %s after partner "
+                    "fiscal document issuing"
+                )
+                % (", ".join(self._fields[f].string for f in fiscal_fields))
+            )
+
+    def write(self, vals):
+        res = super(Partner, self).write(vals)
+        self._check_l10n_do_fiscal_fields(vals)
+
+        return res
+
+    @api.depends("vat", "country_id", "name")
+    def _compute_l10n_do_dgii_payer_type(self):
+        """Compute the type of partner depending on soft decisions"""
         for partner in self:
-            partner.is_fiscal_info_required = partner.sale_fiscal_type_id and \
-            partner.sale_fiscal_type_id.requires_document and \
-            partner.country_id == self.env.ref('base.do') and \
-            not partner.parent_id
+            vat = partner.vat or partner.name or ""
+            vat_len = len(vat) if vat else 0
+            upper_name = partner.name.upper() if partner.name else ""
+            is_dominican_partner = partner.country_code == "DO"
 
-    def _get_fiscal_type_domain(self, prefix):
-        return self.env['account.fiscal.type'].search([
-            ('type', '=', 'out_invoice'),
-            ('prefix', '=', prefix),
-        ], limit=1)
+            if not is_dominican_partner:
+                partner.l10n_do_dgii_tax_payer_type = "foreigner"
+                continue
 
-    @api.depends('vat', 'country_id', 'name')
-    def _compute_sale_fiscal_type_id(self):
-        for partner in self.sudo():
-            vat = partner.name if partner.name and \
-                isinstance(partner.name, str) and \
-                partner.name.isdigit() else partner.vat
+            if not vat.isdigit():
+                partner.l10n_do_dgii_tax_payer_type = "non_payer"
+                continue
 
-            is_dominican_partner = partner.country_id == self.env.ref('base.do')
+            if vat_len == 11:
+                partner.l10n_do_dgii_tax_payer_type = "non_payer"
+            elif vat_len == 9:
+                if "MINISTERIO" in upper_name and not vat.startswith("4"):
+                    partner.l10n_do_dgii_tax_payer_type = "governmental"
+                elif "ZONA FRANCA" in upper_name:
+                    partner.l10n_do_dgii_tax_payer_type = "special"
+                elif "IGLESIA" in upper_name or (
+                    "MINISTERIO" in upper_name and vat.startswith("4")
+                ):
+                    partner.l10n_do_dgii_tax_payer_type = "special"
+                elif not vat.startswith("4"):
+                    partner.l10n_do_dgii_tax_payer_type = "taxpayer"
+                else:
+                    partner.l10n_do_dgii_tax_payer_type = "nonprofit"
+            else:
+                partner.l10n_do_dgii_tax_payer_type = "non_payer"
 
-            new_fiscal_type = self._determine_fiscal_type(partner, vat, is_dominican_partner)
-
-            partner.sale_fiscal_type_id = new_fiscal_type
-            partner.sudo().set_fiscal_position_from_fiscal_type(new_fiscal_type)
-
-    def _determine_fiscal_type(self, partner, vat, is_dominican_partner):
-        not_digit_name = partner.name and isinstance(partner.name, str) and not partner.name.isdigit()
-
-        if not is_dominican_partner:
-            return self._get_fiscal_type_domain('B16')
-
-        elif partner.parent_id:
-            return partner.parent_id.sale_fiscal_type_id
-
-        elif vat and \
-            isinstance(vat, str) and \
-            not partner.sale_fiscal_type_id and \
-            not_digit_name:
-            
-            return self._determine_fiscal_type_by_vat(partner, vat)
-
-        elif is_dominican_partner and not partner.sale_fiscal_type_id and not_digit_name:
-            return self._get_fiscal_type_domain('B02')
-
-        else:
-            return partner.sale_fiscal_type_id
-
-    def _determine_fiscal_type_by_vat(self, partner, vat):
-        if vat.isdigit() and len(vat) == 9:
-            if 'MINISTERIO' in (partner.name or '').upper():
-                return self._get_fiscal_type_domain('B15')
-            if any(keyword in (partner.name or '').upper() for keyword in ('IGLESIA', 'ZONA FRANCA')):
-                return self._get_fiscal_type_domain('B14')
-            return self._get_fiscal_type_domain('B01')
-        return self._get_fiscal_type_domain('B02')
-
-    def _inverse_sale_fiscal_type_id(self):
+    def _inverse_l10n_do_dgii_tax_payer_type(self):
         for partner in self:
-            partner.sale_fiscal_type_id = partner.sale_fiscal_type_id
-            self.sudo().set_fiscal_position_from_fiscal_type(partner.sale_fiscal_type_id)
-
-    @api.model
-    def get_sale_fiscal_type_id_selection(self):
-        return {
-            "sale_fiscal_type_id": self.sale_fiscal_type_id.id,
-            "sale_fiscal_type_list": self.sale_fiscal_type_list,
-            "sale_fiscal_type_vat": self.sale_fiscal_type_vat
-        }
-
-    def set_fiscal_position_from_fiscal_type(self, fiscal_type):
-        if fiscal_type:
-            for company in self.env['res.company'].sudo().search([]):
-                company_new_fiscal_type = fiscal_type.with_company(company).sudo()
-
-                if company_new_fiscal_type.fiscal_position_id:
-                    self.with_company(company).sudo().write({
-                        'property_account_position_id': company_new_fiscal_type.fiscal_position_id.id
-                    })
-
-    sale_fiscal_type_list = [
-        {"id": "final", "name": "Consumo", "ticket_label": "Consumo", "is_default": True},
-        {"id": "fiscal", "name": "Crédito Fiscal"},
-        {"id": "gov", "name": "Gubernamental"},
-        {"id": "special", "name": "Regímenes Especiales"},
-        {"id": "unico", "name": "Único Ingreso"},
-        {"id": "export", "name": "Exportaciones"}
-    ]
-
-    sale_fiscal_type_vat = {
-        "rnc": ["fiscal", "gov", "special"],
-        "ced": ["final", "fiscal"],
-        "other": ["final"],
-        "no_vat": ["final", "unico", "export"]
-    }
+            partner.l10n_do_dgii_tax_payer_type = partner.l10n_do_dgii_tax_payer_type

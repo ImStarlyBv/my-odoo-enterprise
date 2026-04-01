@@ -1,6 +1,7 @@
-from . import account_fiscal_sequence
-from . import account_invoice
-from . import account_journal
-from . import account_invoice_cancel
 from . import res_partner
-# from . import account_invoice_send
+from . import res_company
+from . import l10n_latam_document_type
+from . import account_journal
+from . import account_move
+from . import monkey_patch
+from . import account_move_line

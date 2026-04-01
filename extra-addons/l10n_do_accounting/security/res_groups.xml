@@ -1,24 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<odoo noupdate="0">
+<odoo noupdate="1">
 
-    <record id="credit_note_group" model="res.groups">
-        <field name="name">Access to Credit Notes</field>
+    <record id="group_l10n_do_fiscal_credit_note" model="res.groups">
+        <field name="name">Can create Fiscal Credit Notes</field>
+        <field name="implied_ids" eval="[(4, ref('account.group_account_invoice'))]"/>
+        <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
     </record>
-
-    <record id="base.group_system" model="res.groups">
-        <field name="implied_ids" eval="[(4, ref('l10n_do_accounting.credit_note_group'))]"/>
+    <record id="group_l10n_do_fiscal_invoice_cancel" model="res.groups">
+        <field name="name">Can cancel Fiscal Invoices</field>
+        <field name="implied_ids" eval="[(4, ref('account.group_account_invoice'))]"/>
+        <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
     </record>
-
-    <record id="base.user_admin" model="res.users">
-        <field name="groups_id" eval="[(4,ref('l10n_do_accounting.credit_note_group'))]"/>
+    <record id="group_l10n_do_edit_fiscal_partner" model="res.groups">
+        <field name="name">Can modify partner fiscal fields</field>
+        <field name="implied_ids" eval="[(4, ref('account.group_account_manager'))]"/>
+        <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
     </record>
-
-    <record id="account.group_account_user" model="res.groups">
-        <field name="implied_ids" eval="[(4, ref('l10n_do_accounting.credit_note_group'))]"/>
-    </record>
-
-    <record id="account.group_account_manager" model="res.groups">
-        <field name="implied_ids" eval="[(4, ref('l10n_do_accounting.credit_note_group'))]"/>
+    <record id="group_l10n_do_debit_note" model="res.groups">
+        <field name="name">Can create Debit Notes</field>
+        <field name="implied_ids" eval="[(4, ref('account.group_account_invoice'))]"/>
+        <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
     </record>
 
 </odoo>
