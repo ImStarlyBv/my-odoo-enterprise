@@ -1,6 +1,8 @@
 import re
 from werkzeug import urls
 
+import traceback as _tb
+
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError, UserError, AccessError
 from odoo.tools.sql import column_exists, create_column, drop_index, index_exists
@@ -635,6 +637,39 @@ class AccountMove(models.Model):
         )
         if non_payer_type_invoices:
             raise ValidationError(_("Fiscal invoices require partner fiscal type"))
+
+        # ---------------------------------------------------------------
+        # DEBUG — Prueba del EcfXmlBuilder al publicar un e-CF
+        # Eliminar este bloque cuando el builder esté validado en producción.
+        # ---------------------------------------------------------------
+        
+
+        ecf_invoices = l10n_do_invoices.filtered(lambda inv: inv.is_ecf_invoice)
+        for invoice in ecf_invoices:
+            try:
+                xml_output = invoice._l10n_do_get_ecf_xml()
+                raise UserError(
+                    "⚠️  [DEBUG] XML generado para %s (%s):\n\n%s"
+                    % (
+                        invoice.l10n_do_fiscal_number or invoice.name,
+                        invoice.l10n_latam_document_type_id.name,
+                        xml_output,
+                    )
+                )
+            except UserError:
+                raise
+            except Exception:
+                raise UserError(
+                    "❌  [DEBUG] EcfXmlBuilder falló para %s (%s).\n\nTraceback:\n%s"
+                    % (
+                        invoice.l10n_do_fiscal_number or invoice.name,
+                        invoice.l10n_latam_document_type_id.name,
+                        _tb.format_exc(),
+                    )
+                )
+        # ---------------------------------------------------------------
+        # FIN DEBUG
+        # ---------------------------------------------------------------
 
         return res
 
