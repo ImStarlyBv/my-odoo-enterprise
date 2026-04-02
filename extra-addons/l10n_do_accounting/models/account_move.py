@@ -812,6 +812,32 @@ class AccountMove(models.Model):
 
     # TODO: handle l10n_latam_invoice_document _compute_name() inheritance shit
 
+    def _l10n_do_get_ecf_xml(self):
+        """
+        Genera el XML completo del Comprobante Fiscal Electrónico (e-CF)
+        para esta factura, usando EcfXmlBuilder.
+
+        Returns
+        -------
+        str
+            Cadena XML codificada en UTF-8 lista para firmar y enviar a la DGII.
+
+        Raises
+        ------
+        UserError
+            Si el documento no es un e-CF válido (tipo de NCF no electrónico).
+        """
+        self.ensure_one()
+        if not self.is_ecf_invoice:
+            raise UserError(
+                _(
+                    "This document is not an electronic fiscal document (e-CF). "
+                    "Make sure the document type starts with 'E'."
+                )
+            )
+        from .ecf_xml_builder import EcfXmlBuilder
+        return EcfXmlBuilder(self).build()
+
     def unlink(self):
         if self.filtered(
             lambda inv: inv.is_purchase_document()
