@@ -1,0 +1,15 @@
+<odoo>
+    <record id="product_template_form_view_inherited_digifact" model="ir.ui.view">
+        <field name="name">product.template.form.inherited.digifact</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='invoicing']" position="inside">
+                <group string="Facturación Electrónica DGII" name="dgii_invoicing_info">
+                    <field name="l10n_do_product_type"/>
+                    <field name="l10n_do_billing_indicator"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>
