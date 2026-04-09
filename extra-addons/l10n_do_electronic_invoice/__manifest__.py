@@ -12,6 +12,7 @@
         'security/ir.model.access.csv',
         'wizard/digifact_preview_wizard_views.xml',
         'views/res_company_views.xml',
+        'views/account_move_views.xml',
         'data/l10n_do.municipality.csv',
     ],
     'installable': True,
