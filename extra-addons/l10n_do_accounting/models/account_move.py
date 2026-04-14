@@ -638,39 +638,6 @@ class AccountMove(models.Model):
         if non_payer_type_invoices:
             raise ValidationError(_("Fiscal invoices require partner fiscal type"))
 
-        # ---------------------------------------------------------------
-        # DEBUG — Prueba del EcfXmlBuilder al publicar un e-CF
-        # Eliminar este bloque cuando el builder esté validado en producción.
-        # ---------------------------------------------------------------
-        
-
-        ecf_invoices = l10n_do_invoices.filtered(lambda inv: inv.is_ecf_invoice)
-        for invoice in ecf_invoices:
-            try:
-                xml_output = invoice._l10n_do_get_ecf_xml()
-                raise UserError(
-                    "⚠️  [DEBUG] XML generado para %s (%s):\n\n%s"
-                    % (
-                        invoice.l10n_do_fiscal_number or invoice.name,
-                        invoice.l10n_latam_document_type_id.name,
-                        xml_output,
-                    )
-                )
-            except UserError:
-                raise
-            except Exception:
-                raise UserError(
-                    "❌  [DEBUG] EcfXmlBuilder falló para %s (%s).\n\nTraceback:\n%s"
-                    % (
-                        invoice.l10n_do_fiscal_number or invoice.name,
-                        invoice.l10n_latam_document_type_id.name,
-                        _tb.format_exc(),
-                    )
-                )
-        # ---------------------------------------------------------------
-        # FIN DEBUG
-        # ---------------------------------------------------------------
-
         return res
 
     def _l10n_do_get_formatted_sequence(self):
@@ -846,32 +813,6 @@ class AccountMove(models.Model):
         return super()._get_name_invoice_report()
 
     # TODO: handle l10n_latam_invoice_document _compute_name() inheritance shit
-
-    def _l10n_do_get_ecf_xml(self):
-        """
-        Genera el XML completo del Comprobante Fiscal Electrónico (e-CF)
-        para esta factura, usando EcfXmlBuilder.
-
-        Returns
-        -------
-        str
-            Cadena XML codificada en UTF-8 lista para firmar y enviar a la DGII.
-
-        Raises
-        ------
-        UserError
-            Si el documento no es un e-CF válido (tipo de NCF no electrónico).
-        """
-        self.ensure_one()
-        if not self.is_ecf_invoice:
-            raise UserError(
-                _(
-                    "This document is not an electronic fiscal document (e-CF). "
-                    "Make sure the document type starts with 'E'."
-                )
-            )
-        from .ecf_xml_builder import EcfXmlBuilder
-        return EcfXmlBuilder(self).build()
 
     def unlink(self):
         if self.filtered(
