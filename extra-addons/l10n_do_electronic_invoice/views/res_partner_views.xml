@@ -1,0 +1,47 @@
+<odoo>
+    <record id="view_partner_form_l10n_do_municipality" model="ir.ui.view">
+        <field name="name">res.partner.form.l10n_do.municipality</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            
+            <xpath expr="//field[@name='city']" position="attributes">
+                <attribute name="attrs">{'invisible': [('country_code', '=', 'DO')]}</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='city']" position="after">
+                <field name="l10n_do_municipality_id" 
+                       placeholder="Municipio..." 
+                       class="o_address_city" 
+                       options="{'no_open': True, 'no_create': True}" 
+                       attrs="{'invisible': [('country_code', '!=', 'DO')]}"/>
+            </xpath>
+
+        </field>
+    </record>
+
+    <record id="action_sync_legacy_municipalities" model="ir.actions.server">
+        <field name="name">Sincronizar Municipios DGII</field>
+        <field name="model_id" ref="base.model_res_partner"/>
+        <field name="binding_model_id" ref="base.model_res_partner"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+            <![CDATA[
+# Lógica para Odoo 15/18
+# Filtramos solo los contactos de RD que tienen ciudad de texto pero no tienen ID de municipio
+target_partners = records.filtered(lambda p: p.country_code == 'DO' and p.city and not p.l10n_do_municipality_id)
+
+for partner in target_partners:
+    domain = [('name', '=ilike', partner.city)]
+    if partner.state_id:
+        domain.append(('state_id', '=', partner.state_id.id))
+        
+    municipio = env['l10n_do.municipality'].search(domain, limit=1)
+    if municipio:
+        # Usamos write para que no detone validaciones innecesarias
+        partner.write({'l10n_do_municipality_id': municipio.id})
+            ]]>
+        </field>
+    </record>
+</odoo>
