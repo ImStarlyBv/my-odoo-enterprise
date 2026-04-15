@@ -1,27 +1,13 @@
-# 1. Ignorar el control de versiones (No necesitas el historial de git en producción)
 .git
-.github
 .gitignore
-
-# 2. Archivos de documentación innecesarios en el contenedor
-*.md
-!README.md
-doc/
-
-# 3. Entornos virtuales locales y Node (Docker instalará los suyos)
+.github
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
 venv/
 env/
 .venv/
-node_modules/
-
-# 4. Caché de compilación local
-__pycache__/
-*.py[cod]
-*$py.class
-
-# 5. Archivos de desarrollo e IDEs
-.vscode/
-.idea/
-.dockerignore
-
-*.log
+coolify/
+logs/
