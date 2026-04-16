@@ -32,7 +32,7 @@ services:
       - '8069'
       - '8072'
     volumes:
-      - 'odoo_data:/var/lib/odoo'
+      - 'odoo_18_data:/var/lib/odoo'
     environment:
       HOST: db
       PORT: 5432
@@ -40,7 +40,11 @@ services:
       PASSWORD: odoo
     command:
       - '--config=/etc/odoo/odoo.conf'
+      - '-u'
+      - 'all'
+      - '-d'
+      - 'xqt-solutions'
 
 volumes:
   odoo_db_data: null
-  odoo_data: null
+  odoo_18_data: null
