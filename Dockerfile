@@ -16,6 +16,7 @@ COPY ./requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --break-system-packages --ignore-installed -r /tmp/requirements.txt
 
 # Copiar el código fuente con los permisos correctos al directorio de addons
+COPY odoo.conf /etc/odoo/odoo.conf 
 COPY --chown=odoo:odoo . /mnt/extra-addons/
 
 # Regresar al usuario de bajo privilegio para ejecución segura
