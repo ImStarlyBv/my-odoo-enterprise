@@ -39,11 +39,7 @@ services:
       USER: odoo
       PASSWORD: odoo
     command:
-      - '--config=/etc/odoo/odoo.conf'
-      - '-u'
-      - 'all'
-      - '-d'
-      - 'xqt-solutions'
+        - '--config=/etc/odoo/odoo.conf'
 
 volumes:
   odoo_db_data: null
