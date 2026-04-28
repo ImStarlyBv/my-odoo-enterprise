@@ -1,11 +1,11 @@
 <odoo>
-    <record id="view_company_form_inherited_digifact" model="ir.ui.view">
-        <field name="name">res.company.form.inherited.digifact</field>
+    <record id="view_company_form_inherited_ecf" model="ir.ui.view">
+        <field name="name">res.company.form.inherited.ecf</field>
         <field name="model">res.company</field>
         <field name="inherit_id" ref="base.view_company_form"/>
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
-                <page name="digifact_config" string="DigiFact / e-CF">
+                <page name="ecf_config" string="Facturación Electrónica (e-CF)">
                     <group>
                         <group string="Configuración de Envío">
                             <field name="is_live" widget="boolean_toggle"/>

@@ -13,7 +13,7 @@ class ResCompany(models.Model):
     is_live = fields.Boolean(
         string="Modo Producción", 
         default=False,
-        help="Si está marcado, las facturas electrónicas e-CF se enviarán a producción de DGII/DigiFact."
+        help="Si está marcado, las facturas electrónicas e-CF se enviarán al entorno de producción de la DGII."
     )
     l10n_do_enable_resend_button = fields.Boolean(
         string="Habilitar Botón de Reenvío DGII",
@@ -39,11 +39,11 @@ class ResCompany(models.Model):
 
     # Nativos para la generación del e-CF
     l10n_do_trade_name = fields.Char(
-        string="Nombre Comercial (DigiFact)", 
+        string="Nombre Comercial (e-CF)",
         help="Nombre comercial (NombreComercial) tal como se reporta a la DGII."
     )
     l10n_do_economic_activity = fields.Char(
-        string="Actividad Económica (DigiFact)", 
+        string="Actividad Económica (e-CF)",
         help="Descripción de la actividad económica (ActividadEconomica) principal."
     )
     l10n_do_branch_code = fields.Char(

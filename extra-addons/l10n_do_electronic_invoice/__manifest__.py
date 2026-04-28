@@ -1,7 +1,7 @@
 {
-    'name': 'Electronic Invoicing DGII (DigiFact)',
+    'name': 'Facturación Electrónica e-CF (DGII)',
     'version': '18.0.1.0.0',
-    'summary': 'Generador del JSON de Factura Electrónica (e-CF) para DigiFact - República Dominicana',
+    'summary': 'Generador del payload JSON para e-CF de la DGII - República Dominicana',
     'category': 'Accounting/Localizations',
     'author': 'Omar Bautista',
     'license': 'OPL-1',
@@ -10,7 +10,7 @@
     ],
     'data': [
         'security/ir.model.access.csv',
-        'wizard/digifact_preview_wizard_views.xml',
+        'wizard/ecf_preview_wizard_views.xml',
         'views/res_company_views.xml',
         'views/account_move_views.xml',
         'views/res_partner_views.xml',

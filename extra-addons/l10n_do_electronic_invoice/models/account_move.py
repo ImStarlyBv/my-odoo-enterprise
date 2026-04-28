@@ -1,28 +1,89 @@
 import json
 import re
-from datetime import date, datetime
+from datetime import date
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 
-
-# Mapeo del l10n_do_payment_form del diario al código DGII numérico
+# Mapeo forma de pago del diario → código DGII
 PAYMENT_FORM_TO_DGII_CODE = {
-    'cash': '1',       # Efectivo
-    'bank': '2',       # Cheques / Transferencias / Depósito
-    'card': '3',       # Tarjeta Crédito / Débito
-    'credit': '4',     # Compra a Crédito
-    'bond': '5',       # Bonos o Certificados de Regalo
-    'swap': '6',       # Permuta
-    'others': '8',     # Mixto
+    'cash': '1',
+    'bank': '2',
+    'card': '3',
+    'credit': '4',
+    'bond': '5',
+    'swap': '6',
+    'others': '8',
 }
+
+# Mapeo tasa ITBIS → código DGII
+ITBIS_CODE_MAP = {
+    18.0: 'ITBIS1',
+    16.0: 'ITBIS2',
+    9.0:  'ITBIS3',
+    8.0:  'ITBIS4',
+    0.0:  'EXENTO',
+}
+
+
+def _is_retention_tax(tax):
+    return float(tax.amount or 0.0) < 0
+
+
+def _is_itbis_tax(tax):
+    return 'ITBIS' in (tax.name or '').upper()
+
+
+def _is_isr_tax(tax):
+    name_upper = (tax.name or '').upper()
+    return any(k in name_upper for k in ('ISR', 'RENTA', 'RETENCION', 'RETENCI'))
 
 
 class AccountMove(models.Model):
     _inherit = 'account.move'
 
     # =========================================================================
-    # CAMPOS NUEVOS PARA EL PAYLOAD DIGIFACT
+    # ESTADO ECF
+    # =========================================================================
+
+    ecf_validation_status = fields.Selection(
+        selection=[
+            ('pending', 'Pendiente'),
+            ('success', 'Validado'),
+            ('error', 'Error'),
+        ],
+        string='Estado e-CF',
+        default='pending',
+        store=True,
+        copy=False,
+    )
+    ecf_api_message = fields.Text(
+        string='Mensaje API DGII',
+        copy=False,
+    )
+    ecf_qr_code = fields.Text(
+        string='Código QR e-CF',
+        store=True,
+        copy=False,
+    )
+
+    # =========================================================================
+    # MONEDA / TASA DE CAMBIO
+    # =========================================================================
+
+    l10n_do_currency_rate = fields.Float(
+        string='Tasa de Cambio (DOP)',
+        digits=(12, 4),
+        default=1.0,
+        help='Tasa de conversión a DOP al momento de emitir la factura.',
+    )
+    show_exchange_rate = fields.Boolean(
+        string='Mostrar Tasa de Cambio',
+        compute='_compute_show_exchange_rate',
+    )
+
+    # =========================================================================
+    # DATOS ADICIONALES PARA EL PAYLOAD
     # =========================================================================
 
     l10n_do_payment_type = fields.Selection(
@@ -41,340 +102,282 @@ class AccountMove(models.Model):
         store=True,
         readonly=False,
         copy=False,
-        help='Código de tipo de pago que se envía en el e-CF. '
-             'Se calcula automáticamente desde el pago registrado, pero puede editarse.',
     )
-
-    l10n_do_seller_code = fields.Char(
-        string='Código Vendedor',
-        help='Código del vendedor asignado para el payload del e-CF (CodigoVendedor).',
-    )
-    l10n_do_purchase_order_number = fields.Char(
-        string='Número Pedido Interno',
-        help='Número del pedido interno (NumeroPedidoInterno) para el payload e-CF.',
-    )
-    l10n_do_sales_zone = fields.Char(
-        string='Zona de Venta',
-        help='Zona de venta para el payload del e-CF (ZonaVenta).',
-    )
-    l10n_do_sales_route = fields.Char(
-        string='Ruta de Venta',
-        help='Ruta de venta para el payload del e-CF (RutaVenta).',
-    )
-    l10n_do_additional_seller_info = fields.Char(
-        string='Info Adicional Emisor',
-        help='Información adicional del emisor (InformacionAdicionalEmisor).',
-    )
-    l10n_do_modification_reason = fields.Char(
-        string='Razón de Modificación',
-        copy=False,
-        help='Razón de modificación obligatoria para Notas de Crédito / Débito (E33/E34).',
-    )
+    l10n_do_seller_code = fields.Char(string='Código Vendedor')
+    l10n_do_purchase_order_number = fields.Char(string='Número Pedido Interno')
+    l10n_do_sales_zone = fields.Char(string='Zona de Venta')
+    l10n_do_sales_route = fields.Char(string='Ruta de Venta')
+    l10n_do_additional_seller_info = fields.Char(string='Info Adicional Emisor')
+    l10n_do_modification_reason = fields.Char(string='Razón de Modificación', copy=False)
     l10n_do_indicador_monto_gravado = fields.Selection(
         selection=[('0', 'No'), ('1', 'Sí')],
         string='Indicador Monto Gravado',
         default='0',
-        help='Indicador de monto gravado para el e-CF.',
     )
 
     # =========================================================================
-    # COMPUTE: TIPO DE PAGO DESDE EL PAGO REGISTRADO
+    # CAMPOS COMPUTADOS
     # =========================================================================
+
+    @api.depends('currency_id', 'company_id')
+    def _compute_show_exchange_rate(self):
+        for move in self:
+            move.show_exchange_rate = bool(
+                move.currency_id
+                and move.company_id.currency_id
+                and move.currency_id != move.company_id.currency_id
+            )
 
     @api.depends('invoice_payments_widget')
     def _compute_l10n_do_payment_type(self):
-        """Calcula el tipo de pago DGII desde el pago registrado en la factura.
-        Usa el campo l10n_do_payment_form del diario del pago.
-        Si no hay pago registrado, default a '1' (Efectivo).
-        Si es nota de crédito (out_refund), default a '7'.
-        """
         for move in self:
             if move.move_type == 'out_refund':
                 move.l10n_do_payment_type = '7'
                 continue
-
-            # Buscar pagos conciliados con esta factura
-            payment_type = '1'  # Default: Efectivo
-            reconciled_payments = move._get_reconciled_payments()
-            if reconciled_payments:
-                # Tomar el primer pago como referencia
-                first_payment = reconciled_payments[0]
-                journal = first_payment.journal_id
+            payment_type = '1'
+            reconciled = move._get_reconciled_payments()
+            if reconciled:
+                journal = reconciled[0].journal_id
                 if hasattr(journal, 'l10n_do_payment_form') and journal.l10n_do_payment_form:
-                    payment_type = PAYMENT_FORM_TO_DGII_CODE.get(
-                        journal.l10n_do_payment_form, '1'
-                    )
+                    payment_type = PAYMENT_FORM_TO_DGII_CODE.get(journal.l10n_do_payment_form, '1')
             move.l10n_do_payment_type = payment_type
+
+    # =========================================================================
+    # ONCHANGES
+    # =========================================================================
+
+    @api.onchange('currency_id', 'invoice_date')
+    def _onchange_ecf_currency_rate(self):
+        for move in self:
+            if not move.currency_id or not move.company_id:
+                continue
+            if move.reversed_entry_id:
+                move.l10n_do_currency_rate = move.reversed_entry_id.l10n_do_currency_rate
+                continue
+            if move.currency_id == move.company_id.currency_id:
+                move.l10n_do_currency_rate = 1.0
+            else:
+                rate_date = move.invoice_date or fields.Date.today()
+                move.l10n_do_currency_rate = move.env['res.currency']._get_conversion_rate(
+                    move.currency_id,
+                    move.company_id.currency_id,
+                    move.company_id,
+                    rate_date,
+                )
+
+    # =========================================================================
+    # OVERRIDE DE CONSTRAINT DE SECUENCIA
+    # Los e-CF usan secuencias propias de la DGII que no siguen el patrón
+    # cronológico que Odoo valida, por lo que se excluyen de esa validación.
+    # =========================================================================
+
+    def _constrains_date_sequence(self):
+        to_validate = self.filtered(lambda m: not m.is_ecf_invoice)
+        if to_validate:
+            return super(AccountMove, to_validate)._constrains_date_sequence()
 
     # =========================================================================
     # HELPERS UTILITARIOS
     # =========================================================================
 
-    def _digifact_get_doc_type(self):
-        """Extrae el código numérico del tipo de documento.
-        Ej: 'E31' -> '31', 'E34' -> '34'
-        """
+    def _ecf_get_doc_type(self):
+        """Extrae el código numérico del tipo de documento. 'E31' → '31'."""
         self.ensure_one()
         prefix = self.l10n_latam_document_type_id.doc_code_prefix or ''
         return prefix.lstrip('E')
 
-    def _digifact_get_sequence(self):
-        """Extrae la secuencia numérica del NCF.
-        Ej: 'E340000000101' -> '0000000101'
-        l10n_do_accounting ya genera la secuencia completa en l10n_do_fiscal_number.
-        """
+    def _ecf_get_sequence(self):
+        """Extrae la parte numérica del NCF. 'E310000000101' → '0000000101'."""
         self.ensure_one()
-        fiscal_number = self.l10n_do_fiscal_number or self.l10n_latam_document_number or ''
-        if len(fiscal_number) > 3:
-            return fiscal_number[3:]
-        return '0000000001'
+        fiscal = self.l10n_do_fiscal_number or self.l10n_latam_document_number or ''
+        return fiscal[3:] if len(fiscal) > 3 else '0000000001'
 
-    def _digifact_is_consumer_final(self, doc_type):
-        """Determina si el comprador es consumidor final.
-        Para doc_type 43 y 47, siempre es consumidor final.
-        """
+    def _ecf_is_consumer_final(self, doc_type):
         self.ensure_one()
         if doc_type in ('43', '47'):
             return True
         partner = self.partner_id
-        return (
-            not partner.vat
-            or partner.l10n_do_dgii_tax_payer_type == 'non_payer'
-        )
+        return not partner.vat or partner.l10n_do_dgii_tax_payer_type == 'non_payer'
 
-    def _digifact_extract_emails(self, record):
-        """Extrae lista de emails limpios de un partner o company.
-        Devuelve siempre una lista; si no hay emails, retorna [''].
-        """
-        email_raw = record.email or ''
-        if not email_raw.strip():
+    def _ecf_extract_emails(self, record):
+        raw = record.email or ''
+        if not raw.strip():
             return ['']
-        emails = [e.strip() for e in re.split(r'[;,\s]+', email_raw) if e.strip()]
+        emails = [e.strip() for e in re.split(r'[;,\s]+', raw) if e.strip()]
         return emails or ['']
 
-    def _digifact_extract_phones(self, record):
-        """Extrae lista de teléfonos limpios de un partner o company.
-        Devuelve siempre una lista; si no hay teléfonos, retorna [''].
-        """
-        phone_raw = record.phone or ''
-        if not phone_raw.strip():
+    def _ecf_extract_phones(self, record):
+        raw = record.phone or ''
+        if not raw.strip():
             return ['']
-        phones = [p.strip() for p in re.split(r'[;,]+', phone_raw) if p.strip()]
+        phones = [p.strip() for p in re.split(r'[;,]+', raw) if p.strip()]
         return phones or ['']
 
-    def _digifact_get_item_codes(self, product):
-        """Genera el bloque Codes[] para un producto.
-        Prioridad: barcode (EAN) > default_code (PLU) > SIN_CODIGO
-        """
+    def _ecf_get_item_codes(self, product):
         if product.barcode:
             return [{'Name': 'EAN', 'Value': product.barcode}]
-        elif product.default_code:
+        if product.default_code:
             return [{'Name': 'PLU', 'Value': product.default_code}]
         return [{'Name': 'SIN_CODIGO', 'Value': '0'}]
 
-    def _digifact_get_item_type(self, line, doc_type):
-        """Determina el tipo de ítem (1=Bien, 2=Servicio).
-        Para doc_type '47' siempre es '2' (servicio).
-        Para los demás, se infiere del tipo del producto en Odoo.
-        """
+    def _ecf_get_item_type(self, line, doc_type):
+        """Tipo de ítem DGII: '1' = Bien, '2' = Servicio."""
         if doc_type == '47':
             return '2'
         product = line.product_id
         if not product:
             return '1'
-        # En Odoo 18: product.type puede ser 'consu', 'service', 'product'
-        if product.type == 'service':
-            return '2'
-        return '1'
+        if hasattr(product, 'l10n_do_product_type') and product.l10n_do_product_type:
+            return product.l10n_do_product_type
+        return '2' if product.type == 'service' else '1'
 
-    def _digifact_get_indicador_facturacion(self, doc_type, line):
-        """Determina el IndicadorFacturacion para una línea.
-        '1' = Gravado ITBIS
-        '2' = Otras exenciones
-        '3' = Bienes exentos
-        '4' = Servicios exentos
-        """
-        # Tipos sin gravamen: siempre '2'
+    def _ecf_get_indicador_facturacion(self, doc_type, line):
+        """IndicadorFacturacion por línea según DGII."""
+        product = line.product_id
+        if product and hasattr(product, 'l10n_do_billing_indicator') and product.l10n_do_billing_indicator:
+            return product.l10n_do_billing_indicator
         if doc_type in ('43', '44', '47'):
             return '2'
-
-        # Si la línea tiene impuestos con monto > 0, está gravada
-        has_tax = any(tax.amount > 0 for tax in line.tax_ids)
-        if has_tax:
+        has_itbis = any(_is_itbis_tax(t) and not _is_retention_tax(t) for t in line.tax_ids)
+        if has_itbis:
             return '1'
+        return '4' if self._ecf_get_item_type(line, doc_type) == '2' else '3'
 
-        # Si no tiene impuestos o todos son 0%, depende del tipo de producto
-        item_type = self._digifact_get_item_type(line, doc_type)
-        if item_type == '2':
-            return '4'  # servicio exento
-        return '3'  # bien exento
+    def _ecf_format_amount(self, amount):
+        return '{:.2f}'.format(abs(float(amount or 0.0)))
 
-    def _digifact_format_amount(self, amount):
-        """Formatea un monto a string con 2 decimales."""
-        return '{:.2f}'.format(abs(amount))
-
-    def _digifact_get_price_unit_without_tax(self, line):
-        """Obtiene el precio unitario sin impuestos desde Odoo.
-        Odoo ya calcula price_subtotal = (price_unit * qty * (1 - discount/100))
-        Así que el precio unitario sin impuesto es price_subtotal / quantity.
-        """
+    def _ecf_get_price_unit_without_tax(self, line):
+        """Precio unitario neto. Odoo ya calculó price_subtotal sin importar price_include."""
         if line.quantity:
-            return line.price_subtotal / line.quantity
-        return line.price_unit
+            return float(line.price_subtotal) / float(line.quantity)
+        return float(line.price_unit or 0.0)
 
-    def _digifact_get_ncf_expiry_date(self):
-        """Obtiene la fecha de vencimiento del NCF desde el diario.
-        l10n_do_accounting almacena esto en l10n_do_ncf_expiration_date del move.
-        """
+    def _convert_to_dop(self, amount):
+        """Convierte un monto a DOP usando la tasa almacenada (Decimal para precisión)."""
+        from decimal import Decimal, ROUND_HALF_UP
+        rate = Decimal(str(self.l10n_do_currency_rate or 1.0))
+        d = Decimal(str(float(amount or 0.0)))
+        return float((d * rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+
+    def _ecf_get_ncf_expiry_date(self):
         self.ensure_one()
         if self.l10n_do_ncf_expiration_date:
             return self.l10n_do_ncf_expiration_date.strftime('%Y-%m-%d')
         return ''
 
-    def _digifact_get_ref_invoice(self):
-        """Obtiene la factura de referencia para notas de crédito/débito."""
+    def _ecf_get_ref_invoice(self):
         self.ensure_one()
         return self.reversed_entry_id or self.debit_origin_id or self.env['account.move']
 
     # =========================================================================
-    # EXTRACCION DE TOTALES DE IMPUESTOS (Usando datos de Odoo)
+    # EXTRACCIÓN DE TOTALES DE IMPUESTOS (Odoo 18, sin recalcular)
     # =========================================================================
 
-    def _digifact_get_tax_totals(self, doc_type):
-        """Extrae los totales de impuestos directamente desde los datos calculados
-        por Odoo en la factura. NO recalcula nada.
+    def _ecf_get_tax_totals(self, doc_type):
+        """Lee totales de impuestos desde los datos calculados por Odoo.
 
-        Retorna un dict con:
-        - 'total_taxes': lista de dicts con Code, TaxableAmount, Rate, Amount
-        - 'total_itbis': suma total de ITBIS
-        - 'total_exempt': suma total de líneas exentas
-        - 'total_isr_retencion': total ISR retenido (para doc 41/47)
-        - 'total_itbis_retenido': total ITBIS retenido (para doc 41)
-        - 'line_retentions': dict {line_id: {MontoISRRetenido, MontoITBISRetenido}}
+        Fuentes:
+        - self.line_ids (display_type='tax'): importes reales del asiento contable
+        - line.price_subtotal: base por línea ya calculada por Odoo
+
+        No se llama compute_all en ningún caso.
+
+        Retorna dict con:
+          total_taxes          lista TotalTax para el JSON
+          total_itbis          suma ITBIS positivo
+          total_exempt         suma bases de líneas sin ITBIS
+          total_isr_retencion  total ISR retenido
+          total_itbis_retenido total ITBIS retenido
+          line_retentions      {line.id: {MontoISRRetenido, MontoITBISRetenido}}
         """
         self.ensure_one()
 
-        group_itbis = self.env.ref(
-            'account.%s_tax_group_itbis' % self.company_id.id,
-            raise_if_not_found=False,
-        )
-        group_isr = self.env.ref(
-            'account.%s_tax_group_isr' % self.company_id.id,
-            raise_if_not_found=False,
-        )
-
-        # Mapeo de tasas ITBIS a códigos DGII
-        itbis_code_map = {
-            18.0: 'ITBIS1',
-            16.0: 'ITBIS2',
-            0.0: 'ITBIS3',
-        }
-
+        # Leer asientos de impuesto reales del diario
         tax_lines = self.line_ids.filtered(
-            lambda l: l.display_type == 'tax'
-            and l.tax_line_id
-            and l.currency_id == self.currency_id
+            lambda l: l.display_type == 'tax' and l.tax_line_id
         )
 
-        # Agrupar impuestos por código DGII
-        tax_groups = {}
+        itbis_groups = {}   # code → {Code, Rate, TaxableAmount, Amount}
         total_itbis = 0.0
         total_isr_retencion = 0.0
         total_itbis_retenido = 0.0
 
         for tl in tax_lines:
             tax = tl.tax_line_id
-            tax_amount = abs(tl.amount_currency)
-            tax_rate = abs(tax.amount)
+            amount = abs(float(tl.amount_currency or 0.0))
+            rate = abs(float(tax.amount or 0.0))
+            is_ret = _is_retention_tax(tax)
 
-            if group_itbis and tl.tax_group_id == group_itbis:
-                if tax.amount < 0:
-                    # ITBIS Retenido
-                    total_itbis_retenido += tax_amount
+            if _is_itbis_tax(tax):
+                if is_ret:
+                    total_itbis_retenido += amount
                 else:
-                    code = itbis_code_map.get(tax_rate, 'ITBIS1')
-                    total_itbis += tax_amount
-                    if code not in tax_groups:
-                        tax_groups[code] = {
-                            'Code': code,
-                            'Rate': self._digifact_format_amount(tax_rate),
-                            'TaxableAmount': 0.0,
-                            'Amount': 0.0,
-                        }
-                    tax_groups[code]['Amount'] += tax_amount
-            elif group_isr and tl.tax_group_id == group_isr:
-                if tax.amount < 0:
-                    total_isr_retencion += tax_amount
+                    code = ITBIS_CODE_MAP.get(round(rate, 1), 'ITBIS1')
+                    if code not in itbis_groups:
+                        itbis_groups[code] = {'Code': code, 'Rate': rate, 'TaxableAmount': 0.0, 'Amount': 0.0}
+                    itbis_groups[code]['Amount'] += amount
+                    total_itbis += amount
+            elif _is_isr_tax(tax) and is_ret:
+                total_isr_retencion += amount
 
-        # Calcular las bases imponibles y montos exentos desde las líneas de producto
-        product_lines = self.invoice_line_ids.filtered(
-            lambda l: l.display_type == 'product'
-        )
+        # Calcular bases imponibles desde líneas de producto
+        product_lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
         total_exempt = 0.0
 
         for line in product_lines:
-            line_has_itbis = False
+            codes_on_line = set()
             for tax in line.tax_ids:
-                if group_itbis and tax.tax_group_id == group_itbis and tax.amount >= 0:
-                    rate = abs(tax.amount)
-                    code = itbis_code_map.get(rate, 'ITBIS1')
-                    if code in tax_groups:
-                        tax_groups[code]['TaxableAmount'] += abs(line.price_subtotal)
-                    line_has_itbis = True
+                if _is_itbis_tax(tax) and not _is_retention_tax(tax):
+                    code = ITBIS_CODE_MAP.get(round(abs(float(tax.amount or 0.0)), 1), 'ITBIS1')
+                    if code in itbis_groups:
+                        itbis_groups[code]['TaxableAmount'] += abs(float(line.price_subtotal or 0.0))
+                    codes_on_line.add(code)
+            if not codes_on_line:
+                total_exempt += abs(float(line.price_subtotal or 0.0))
 
-            # Si la línea NO tiene ITBIS positivo, es exenta
-            if not line_has_itbis:
-                total_exempt += abs(line.price_subtotal)
-
-        # Formatear los montos
+        # Construir lista formateada
         total_tax_list = []
-        for code in sorted(tax_groups.keys()):
-            entry = tax_groups[code]
+        for code in sorted(itbis_groups.keys()):
+            entry = itbis_groups[code]
             total_tax_list.append({
                 'Code': entry['Code'],
-                'TaxableAmount': self._digifact_format_amount(entry['TaxableAmount']),
-                'Rate': entry['Rate'],
-                'Amount': self._digifact_format_amount(entry['Amount']),
+                'TaxableAmount': self._ecf_format_amount(entry['TaxableAmount']),
+                'Rate': self._ecf_format_amount(entry['Rate']),
+                'Amount': self._ecf_format_amount(entry['Amount']),
             })
 
-        # Agregar bloque EXENTO si hay montos exentos
         if total_exempt > 0:
             total_tax_list.append({
                 'Code': 'EXENTO',
-                'Amount': self._digifact_format_amount(total_exempt),
+                'Amount': self._ecf_format_amount(total_exempt),
             })
 
-        # Si no hay impuestos y no hay exentos pero sí hay base, agregar ITBIS3 (0%)
+        # Sin impuestos ni exentos pero con base → ITBIS3 a 0%
         if not total_tax_list and self.amount_untaxed:
             total_tax_list.append({
                 'Code': 'ITBIS3',
-                'TaxableAmount': self._digifact_format_amount(self.amount_untaxed),
+                'TaxableAmount': self._ecf_format_amount(self.amount_untaxed),
                 'Rate': '0.00',
                 'Amount': '0.00',
             })
 
-        # Retenciones por línea (para doc 41 / 47)
+        # Retenciones por línea: price_subtotal × tasa (sin compute_all)
         line_retentions = {}
         for line in product_lines:
             isr_ret = 0.0
             itbis_ret = 0.0
+            base = abs(float(line.price_subtotal or 0.0))
             for tax in line.tax_ids:
-                if tax.amount < 0:
-                    # Calcular el monto de retención para esta línea específica
-                    tax_data = tax.compute_all(
-                        price_unit=line.price_unit * (1 - (line.discount / 100.0)),
-                        quantity=line.quantity,
-                        currency=line.currency_id,
-                    )
-                    for t in tax_data.get('taxes', []):
-                        if t['id'] == tax.id:
-                            if group_isr and tax.tax_group_id == group_isr:
-                                isr_ret += abs(t['amount'])
-                            elif group_itbis and tax.tax_group_id == group_itbis:
-                                itbis_ret += abs(t['amount'])
+                if not _is_retention_tax(tax):
+                    continue
+                ret_amount = abs(float(tax.amount or 0.0)) / 100.0 * base
+                if _is_itbis_tax(tax):
+                    itbis_ret += ret_amount
+                else:
+                    isr_ret += ret_amount
             line_retentions[line.id] = {
-                'MontoISRRetenido': self._digifact_format_amount(isr_ret),
-                'MontoITBISRetenido': self._digifact_format_amount(itbis_ret),
+                'MontoISRRetenido': self._ecf_format_amount(isr_ret),
+                'MontoITBISRetenido': self._ecf_format_amount(itbis_ret),
             }
 
         return {
@@ -387,72 +390,56 @@ class AccountMove(models.Model):
         }
 
     # =========================================================================
-    # CONSTRUCTORES DE SECCIONES DEL JSON
+    # SECCIONES DEL JSON
     # =========================================================================
 
-    def _digifact_get_header(self, doc_type):
-        """Construye el bloque Header del JSON.
-        Cada campo se incluye/excluye según el tipo de documento,
-        siguiendo exactamente la lógica del PayloadBuilder original.
-        """
+    def _ecf_get_header(self, doc_type):
         self.ensure_one()
         inv_date = self.invoice_date or date.today()
 
         additional_info = [
-            {'Name': 'Secuencia', 'Value': self._digifact_get_sequence()},
+            {'Name': 'Secuencia', 'Value': self._ecf_get_sequence()},
         ]
 
         # FechaVencimientoSecuencia: excluir para 32 y 34
         if doc_type not in ('32', '34'):
-            ncf_expiry = self._digifact_get_ncf_expiry_date()
+            ncf_expiry = self._ecf_get_ncf_expiry_date()
             if ncf_expiry:
-                additional_info.append(
-                    {'Name': 'FechaVencimientoSecuencia', 'Value': ncf_expiry}
-                )
+                additional_info.append({'Name': 'FechaVencimientoSecuencia', 'Value': ncf_expiry})
 
         # IndicadorNotaCredito: solo para tipo 34
         if doc_type == '34':
-            ref_invoice = self._digifact_get_ref_invoice()
+            ref_invoice = self._ecf_get_ref_invoice()
             indicator = '0'
             if ref_invoice and ref_invoice.invoice_date:
-                days_diff = (inv_date - ref_invoice.invoice_date).days
-                indicator = '1' if days_diff > 30 else '0'
-            additional_info.append(
-                {'Name': 'IndicadorNotaCredito', 'Value': indicator}
-            )
+                indicator = '1' if (inv_date - ref_invoice.invoice_date).days > 30 else '0'
+            additional_info.append({'Name': 'IndicadorNotaCredito', 'Value': indicator})
 
         # IndicadorEnvioDiferido: excluir para 41, 47, 43
         if doc_type not in ('41', '47', '43'):
-            additional_info.append(
-                {'Name': 'IndicadorEnvioDiferido', 'Value': '1'}
-            )
+            additional_info.append({'Name': 'IndicadorEnvioDiferido', 'Value': '1'})
 
         # IndicadorMontoGravado: excluir para 43, 44, 46, 47
         if doc_type not in ('43', '44', '46', '47'):
-            additional_info.append(
-                {'Name': 'IndicadorMontoGravado', 'Value': self.l10n_do_indicador_monto_gravado or '0'}
-            )
+            additional_info.append({
+                'Name': 'IndicadorMontoGravado',
+                'Value': self.l10n_do_indicador_monto_gravado or '0',
+            })
 
         # TipoIngresos: excluir para 41, 43, 47
         if doc_type not in ('41', '43', '47'):
-            additional_info.append(
-                {'Name': 'TipoIngresos', 'Value': self.l10n_do_income_type or '01'}
-            )
+            additional_info.append({
+                'Name': 'TipoIngresos',
+                'Value': self.l10n_do_income_type or '01',
+            })
 
-        # TipoPago: siempre se incluye
-        additional_info.append(
-            {'Name': 'TipoPago', 'Value': self.l10n_do_payment_type or '1'}
-        )
+        additional_info.append({'Name': 'TipoPago', 'Value': self.l10n_do_payment_type or '1'})
 
-        # FechaDesde (fecha factura) / FechaHasta (fecha vencimiento): excluir para 41, 43
+        # FechaDesde / FechaHasta: excluir para 41, 43
         if doc_type not in ('41', '43'):
-            additional_info.append(
-                {'Name': 'FechaDesde', 'Value': inv_date.strftime('%Y-%m-%d')}
-            )
+            additional_info.append({'Name': 'FechaDesde', 'Value': inv_date.strftime('%Y-%m-%d')})
             end_date = self.invoice_date_due or inv_date
-            additional_info.append(
-                {'Name': 'FechaHasta', 'Value': end_date.strftime('%Y-%m-%d')}
-            )
+            additional_info.append({'Name': 'FechaHasta', 'Value': end_date.strftime('%Y-%m-%d')})
 
         return {
             'DocType': doc_type,
@@ -460,57 +447,38 @@ class AccountMove(models.Model):
             'AdditionalIssueDocInfo': additional_info,
         }
 
-    def _digifact_get_seller(self, doc_type):
-        """Construye el bloque Seller del JSON."""
+    def _ecf_get_seller(self, doc_type):
         self.ensure_one()
         company = self.company_id
 
-        # Información adicional del emisor
         additional_info = [
             {'Name': 'NombreComercial', 'Value': company.l10n_do_trade_name or company.name or ''},
             {'Name': 'ActividadEconomica', 'Value': company.l10n_do_economic_activity or ''},
         ]
 
-        # CodigoVendedor: solo si NO es 41, 43, 47
         if doc_type not in ('41', '43', '47'):
-            additional_info.append(
-                {'Name': 'CodigoVendedor', 'Value': self.l10n_do_seller_code or ''}
-            )
+            additional_info.append({'Name': 'CodigoVendedor', 'Value': self.l10n_do_seller_code or ''})
 
-        additional_info.append(
-            {'Name': 'NumeroFacturaInterna', 'Value': self.name or ''}
-        )
-        additional_info.append(
-            {'Name': 'NumeroPedidoInterno', 'Value': self.l10n_do_purchase_order_number or self.invoice_origin or self.name or ''}
-        )
+        additional_info.extend([
+            {'Name': 'NumeroFacturaInterna', 'Value': self.name or ''},
+            {'Name': 'NumeroPedidoInterno', 'Value': self.l10n_do_purchase_order_number or self.invoice_origin or self.name or ''},
+        ])
 
-        # ZonaVenta, RutaVenta: solo si NO es 41, 43, 47
         if doc_type not in ('41', '43', '47'):
-            additional_info.append(
-                {'Name': 'ZonaVenta', 'Value': self.l10n_do_sales_zone or ''}
-            )
-            additional_info.append(
-                {'Name': 'RutaVenta', 'Value': self.l10n_do_sales_route or ''}
-            )
+            additional_info.append({'Name': 'ZonaVenta', 'Value': self.l10n_do_sales_zone or ''})
+            additional_info.append({'Name': 'RutaVenta', 'Value': self.l10n_do_sales_route or ''})
 
-        additional_info.append(
-            {'Name': 'InformacionAdicionalEmisor', 'Value': self.l10n_do_additional_seller_info or ''}
-        )
+        additional_info.append({'Name': 'InformacionAdicionalEmisor', 'Value': self.l10n_do_additional_seller_info or ''})
 
-        # BranchInfo: dirección principal de la empresa
-        district_code = ''
-        state_code = ''
-        if hasattr(company, 'l10n_do_municipality_id') and company.l10n_do_municipality_id:
-            district_code = company.l10n_do_municipality_id.code or ''
-        if company.state_id and hasattr(company.state_id, 'l10n_do_dgii_code'):
-            state_code = company.state_id.l10n_do_dgii_code or ''
+        district_code = company.l10n_do_municipality_id.code if hasattr(company, 'l10n_do_municipality_id') and company.l10n_do_municipality_id else ''
+        state_code = company.state_id.l10n_do_dgii_code if company.state_id and hasattr(company.state_id, 'l10n_do_dgii_code') else ''
 
         return {
             'TaxID': company.vat or '',
             'Name': company.name or '',
             'Contact': {
-                'PhoneList': {'Phone': self._digifact_extract_phones(company)},
-                'EmailList': {'Email': self._digifact_extract_emails(company)},
+                'PhoneList': {'Phone': self._ecf_extract_phones(company)},
+                'EmailList': {'Email': self._ecf_extract_emails(company)},
                 'Website': company.website or '',
             },
             'AdditionlInfo': additional_info,
@@ -525,61 +493,44 @@ class AccountMove(models.Model):
             },
         }
 
-    def _digifact_get_buyer(self, doc_type):
-        """Construye el bloque Buyer del JSON.
-        Para tipos 43 y 47: TaxID='NO_APLICA'.
-        Para tipo 43: Name=''.
-        Contact, AdditionlInfo y AddressInfo siempre se envían (excepto
-        cuando es consumidor final por falta de VAT en otros tipos).
-        """
+    def _ecf_get_buyer(self, doc_type):
         self.ensure_one()
         partner = self.partner_id
-        is_consumer = self._digifact_is_consumer_final(doc_type)
+        is_consumer = self._ecf_is_consumer_final(doc_type)
 
         if doc_type in ('43', '47'):
-            # Tipos 43 y 47: siempre NO_APLICA
-            buyer = {
+            return {
                 'TaxID': 'NO_APLICA',
                 'Name': '' if doc_type == '43' else (partner.name or ''),
                 'Contact': {
-                    'PhoneList': {'Phone': self._digifact_extract_phones(partner)},
-                    'EmailList': {'Email': self._digifact_extract_emails(partner)},
+                    'PhoneList': {'Phone': self._ecf_extract_phones(partner)},
+                    'EmailList': {'Email': self._ecf_extract_emails(partner)},
                 },
                 'AdditionlInfo': [
                     {'Name': 'InformacionAdicionalComprador', 'Value': 'Detalles adicionales'},
                 ],
-                'AddressInfo': self._digifact_get_address_info(partner),
-            }
-        elif is_consumer:
-            # Consumidor final (sin RNC): solo TaxID
-            buyer = {
-                'TaxID': 'NO_APLICA',
-            }
-        else:
-            # Comprador con RNC válido
-            buyer = {
-                'TaxID': partner.vat or '',
-                'Name': partner.name or '',
-                'Contact': {
-                    'PhoneList': {'Phone': self._digifact_extract_phones(partner)},
-                    'EmailList': {'Email': self._digifact_extract_emails(partner)},
-                },
-                'AdditionlInfo': [
-                    {'Name': 'InformacionAdicionalComprador', 'Value': 'Detalles adicionales'},
-                ],
-                'AddressInfo': self._digifact_get_address_info(partner),
+                'AddressInfo': self._ecf_get_address_info(partner),
             }
 
-        return buyer
+        if is_consumer:
+            return {'TaxID': 'NO_APLICA'}
 
-    def _digifact_get_address_info(self, partner):
-        """Extrae el bloque AddressInfo de un partner."""
-        district_code = ''
-        state_code = ''
-        if hasattr(partner, 'l10n_do_municipality_id') and partner.l10n_do_municipality_id:
-            district_code = partner.l10n_do_municipality_id.code or ''
-        if partner.state_id and hasattr(partner.state_id, 'l10n_do_dgii_code'):
-            state_code = partner.state_id.l10n_do_dgii_code or ''
+        return {
+            'TaxID': partner.vat or '',
+            'Name': partner.name or '',
+            'Contact': {
+                'PhoneList': {'Phone': self._ecf_extract_phones(partner)},
+                'EmailList': {'Email': self._ecf_extract_emails(partner)},
+            },
+            'AdditionlInfo': [
+                {'Name': 'InformacionAdicionalComprador', 'Value': 'Detalles adicionales'},
+            ],
+            'AddressInfo': self._ecf_get_address_info(partner),
+        }
+
+    def _ecf_get_address_info(self, partner):
+        district_code = partner.l10n_do_municipality_id.code if hasattr(partner, 'l10n_do_municipality_id') and partner.l10n_do_municipality_id else ''
+        state_code = partner.state_id.l10n_do_dgii_code if partner.state_id and hasattr(partner.state_id, 'l10n_do_dgii_code') else ''
         return {
             'Address': partner.street or '',
             'District': district_code,
@@ -587,69 +538,51 @@ class AccountMove(models.Model):
             'Country': 'DO',
         }
 
-    def _digifact_get_items(self, doc_type, tax_data):
-        """Construye el bloque Items[] del JSON.
-        Discounts y Charges se excluyen para tipos 43 y 47 (según PayloadBuilder).
-        """
+    def _ecf_get_items(self, doc_type, tax_data):
         self.ensure_one()
         items = []
-
-        product_lines = self.invoice_line_ids.filtered(
-            lambda l: l.display_type == 'product'
-        )
+        product_lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
 
         for line in product_lines:
             product = line.product_id
-            price_unit = self._digifact_get_price_unit_without_tax(line)
+            price_unit = self._ecf_get_price_unit_without_tax(line)
 
             item = {
-                'Codes': self._digifact_get_item_codes(product),
-                'Type': self._digifact_get_item_type(line, doc_type),
+                'Codes': self._ecf_get_item_codes(product),
+                'Type': self._ecf_get_item_type(line, doc_type),
                 'Description': line.name or (product.name if product else 'SIN_DESCRIPCION'),
-                'Qty': self._digifact_format_amount(line.quantity),
-                'UnitOfMeasure': '32',  # TODO: mapear desde uom si se agrega l10n_do_uom_code
-                'Price': self._digifact_format_amount(price_unit),
+                'Qty': self._ecf_format_amount(line.quantity),
+                'UnitOfMeasure': (
+                    product.uom_id.l10n_do_dgii_code
+                    if product and product.uom_id and hasattr(product.uom_id, 'l10n_do_dgii_code') and product.uom_id.l10n_do_dgii_code
+                    else '32'
+                ),
+                'Price': self._ecf_format_amount(price_unit),
             }
 
-            # Discounts y Charges: excluir para tipos 43 y 47
+            # Discounts y Charges: excluir para 43 y 47
             if doc_type not in ('43', '47'):
-                discount_amount = 0.0
-                discount_rate = 0.0
-                discount_code = '$'
-                if line.discount > 0:
-                    discount_code = '%'
-                    discount_rate = line.discount
-                    discount_amount = line.price_unit * (line.discount / 100.0) * line.quantity
+                discount_rate = float(line.discount or 0.0)
+                if discount_rate > 0:
+                    discount_amount = float(line.price_unit or 0.0) * (discount_rate / 100.0) * float(line.quantity or 0.0)
+                    item['Discounts'] = {
+                        'Discount': [{'Code': '%', 'Amount': self._ecf_format_amount(discount_amount), 'Rate': self._ecf_format_amount(discount_rate)}],
+                    }
+                else:
+                    item['Discounts'] = {
+                        'Discount': [{'Code': '$', 'Amount': '0.00', 'Rate': '0.00'}],
+                    }
+                item['Charges'] = {'Charge': [{'Code': '$', 'Amount': '0.00'}]}
 
-                item['Discounts'] = {
-                    'Discount': [{
-                        'Code': discount_code,
-                        'Amount': self._digifact_format_amount(discount_amount),
-                        'Rate': self._digifact_format_amount(discount_rate),
-                    }],
-                }
-                item['Charges'] = {
-                    'Charge': [{'Code': '$', 'Amount': '0.00'}],
-                }
+            item['Totals'] = {'TotalItem': self._ecf_format_amount(line.price_subtotal)}
 
-            item['Totals'] = {
-                'TotalItem': self._digifact_format_amount(line.price_subtotal),
-            }
-
-            # AdditionalInfo por línea
+            retention = tax_data.get('line_retentions', {}).get(line.id, {})
             additional_info = [
                 {'Name': 'DescripcionItem', 'Value': product.name if product else ''},
-                {'Name': 'IndicadorFacturacion', 'Value': self._digifact_get_indicador_facturacion(doc_type, line)},
+                {'Name': 'IndicadorFacturacion', 'Value': self._ecf_get_indicador_facturacion(doc_type, line)},
+                {'Name': 'MontoISRRetenido', 'Value': retention.get('MontoISRRetenido', '0.00')},
             ]
 
-            # MontoISRRetenido siempre se incluye (como 0.00 si no hay retención)
-            retention = tax_data.get('line_retentions', {}).get(line.id, {})
-            additional_info.append({
-                'Name': 'MontoISRRetenido',
-                'Value': retention.get('MontoISRRetenido', '0.00'),
-            })
-
-            # Retenciones extendidas (para doc 41 / 47)
             if doc_type in ('41', '47'):
                 additional_info.append({'Name': 'IndicadorAgenteRetencionPercepcion', 'Value': '1'})
                 if doc_type == '41':
@@ -663,231 +596,150 @@ class AccountMove(models.Model):
 
         return items
 
-    def _digifact_get_totals(self, doc_type, tax_data):
-        """Construye el bloque Totals del JSON.
-        Los montos se toman directamente de Odoo, no se recalculan.
-        TotalTaxableAmount siempre se envía como string formateado.
-        Para tipo 47: TotalTaxes usa EXENTO con Amount = InvoiceTotal.
-        """
+    def _ecf_get_totals(self, doc_type, tax_data):
         self.ensure_one()
-
-        product_lines = self.invoice_line_ids.filtered(
-            lambda l: l.display_type == 'product'
-        )
-        qty_items = len(product_lines)
+        product_lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
 
         totals = {
-            'QtyItems': qty_items,
-            'TotalTaxableAmount': self._digifact_format_amount(self.amount_untaxed),
+            'QtyItems': len(product_lines),
+            'TotalTaxableAmount': self._ecf_format_amount(self.amount_untaxed),
         }
 
-        # TotalTaxes: para tipo 47 usa EXENTO
         if doc_type == '47':
             totals['TotalTaxes'] = {
-                'TotalTax': [{
-                    'Code': 'EXENTO',
-                    'Amount': self._digifact_format_amount(self.amount_total),
-                }],
+                'TotalTax': [{'Code': 'EXENTO', 'Amount': self._ecf_format_amount(self.amount_total)}],
             }
         else:
-            totals['TotalTaxes'] = {
-                'TotalTax': tax_data.get('total_taxes', []),
-            }
+            totals['TotalTaxes'] = {'TotalTax': tax_data.get('total_taxes', [])}
 
-        totals['GrandTotal'] = {
-            'InvoiceTotal': self._digifact_format_amount(self.amount_total),
-        }
+        totals['GrandTotal'] = {'InvoiceTotal': self._ecf_format_amount(self.amount_total)}
 
-        # AdditionalInfo en Totals (retenciones para doc 41 / 47)
         if doc_type in ('41', '47'):
             totals_additional = [
-                {
-                    'Name': 'TotalISRRetencion',
-                    'Value': self._digifact_format_amount(tax_data.get('total_isr_retencion', 0.0)),
-                },
+                {'Name': 'TotalISRRetencion', 'Value': self._ecf_format_amount(tax_data.get('total_isr_retencion', 0.0))},
             ]
             if doc_type == '41':
                 totals_additional.append({
                     'Name': 'TotalITBISRetenido',
-                    'Value': self._digifact_format_amount(tax_data.get('total_itbis_retenido', 0.0)),
+                    'Value': self._ecf_format_amount(tax_data.get('total_itbis_retenido', 0.0)),
                 })
             totals['AdditionalInfo'] = totals_additional
 
         return totals
 
-    def _digifact_get_additional_doc_info(self, doc_type, tax_data):
-        """Construye el bloque AdditionalDocumentInfo del JSON.
-
-        Comportamiento por tipo de documento:
-        - Tipos 44, 47: retorna dict vacío {}
-        - Tipo 43: bloque especial con NombrePuertoSalida
-        - Tipo 46: sin bloque SUBTOTALES; si hay referencia se agrega
-        - Otros: bloque SUBTOTALES + bloque INFORMACION_REFERENCIA (si aplica)
-        """
+    def _ecf_get_additional_doc_info(self, doc_type, tax_data):
         self.ensure_one()
 
-        # Tipos que NO llevan AdditionalDocumentInfo completo
         if doc_type in ('44', '47'):
             return {}
 
-        # Tipo 43: bloque especial hardcoded (según PayloadBuilder original)
         if doc_type == '43':
             return {
                 'AdditionalInfo': [{
                     'AditionalData': {
-                        'Data': [{
-                            'Info': [
-                                {'Name': 'NombrePuertoSalida', 'Value': 'Puerto'},
-                            ],
-                            'Name': '',
-                            'Id': 0,
-                        }],
+                        'Data': [{'Info': [{'Name': 'NombrePuertoSalida', 'Value': 'Puerto'}], 'Name': '', 'Id': 0}],
                     },
                 }],
             }
 
         data_blocks = []
 
-        # Bloque SUBTOTALES: para todos excepto tipo 46
-        if doc_type not in ('46',):
+        # Bloque SUBTOTALES: para todos excepto 46
+        if doc_type != '46':
             subtotals_info = [
-                {'Name': 'SubTotalMontoGravado1', 'Value': self._digifact_format_amount(self.amount_untaxed)},
-                {'Name': 'SubTotalITBIS', 'Value': self._digifact_format_amount(tax_data.get('total_itbis', 0.0))},
+                {'Name': 'SubTotalMontoGravado1', 'Value': self._ecf_format_amount(self.amount_untaxed)},
+                {'Name': 'SubTotalITBIS', 'Value': self._ecf_format_amount(tax_data.get('total_itbis', 0.0))},
             ]
-
-            # SubTotalMontoGravadoTotal
             if doc_type == '41':
-                # Para 41: total - retenciones
-                grand_total = self.amount_total
-                net = grand_total - tax_data.get('total_isr_retencion', 0.0) - tax_data.get('total_itbis_retenido', 0.0)
-                subtotals_info.append({
-                    'Name': 'SubTotalMontoGravadoTotal',
-                    'Value': self._digifact_format_amount(net),
-                })
+                net = self.amount_total - tax_data.get('total_isr_retencion', 0.0) - tax_data.get('total_itbis_retenido', 0.0)
+                subtotals_info.append({'Name': 'SubTotalMontoGravadoTotal', 'Value': self._ecf_format_amount(net)})
             else:
-                subtotals_info.append({
-                    'Name': 'SubTotalMontoGravadoTotal',
-                    'Value': self._digifact_format_amount(self.amount_total),
-                })
+                subtotals_info.append({'Name': 'SubTotalMontoGravadoTotal', 'Value': self._ecf_format_amount(self.amount_total)})
+            data_blocks.append({'Name': 'SUBTOTALES', 'Info': subtotals_info})
 
-            data_blocks.append({
-                'Name': 'INFORMACION_REFERENCIA',
-                'Info': subtotals_info,
-            })
-
-        # Bloque INFORMACION_REFERENCIA para Notas Crédito/Débito (33, 34)
+        # Bloque INFORMACION_REFERENCIA: solo para notas de crédito/débito (33, 34)
         if doc_type in ('33', '34'):
-            ref_invoice = self._digifact_get_ref_invoice()
-            ref_info = [
-                {
-                    'Name': 'FechaNCFModificado',
-                    'Value': ref_invoice.invoice_date.strftime('%Y-%m-%d') if ref_invoice and ref_invoice.invoice_date else '',
-                },
-                {
-                    'Name': 'NCFModificado',
-                    'Value': (ref_invoice.l10n_do_fiscal_number or ref_invoice.l10n_latam_document_number or '') if ref_invoice else '',
-                },
-                {
-                    'Name': 'CodigoModificacion',
-                    'Value': self.l10n_do_ecf_modification_code or '',
-                },
-            ]
+            ref_invoice = self._ecf_get_ref_invoice()
             data_blocks.append({
-                'Info': ref_info,
                 'Name': 'INFORMACION_REFERENCIA',
+                'Info': [
+                    {
+                        'Name': 'FechaNCFModificado',
+                        'Value': ref_invoice.invoice_date.strftime('%Y-%m-%d') if ref_invoice and ref_invoice.invoice_date else '',
+                    },
+                    {
+                        'Name': 'NCFModificado',
+                        'Value': (ref_invoice.l10n_do_fiscal_number or ref_invoice.l10n_latam_document_number or '') if ref_invoice else '',
+                    },
+                    {
+                        'Name': 'CodigoModificacion',
+                        'Value': self.l10n_do_ecf_modification_code or '',
+                    },
+                ],
             })
 
         return {
             'AdditionalInfo': [{
-                'AditionalData': {
-                    'Data': data_blocks,
-                },
+                'AditionalData': {'Data': data_blocks},
             }],
         }
 
-    def _digifact_get_payments(self, doc_type, tax_data):
-        """Construye el bloque Payments del JSON.
-        Para doc 41: monto neto = total - ISR retenido - ITBIS retenido.
-        Para otros: amount_untaxed.
-        """
+    def _ecf_get_payments(self, doc_type, tax_data):
         self.ensure_one()
-
         if doc_type == '41':
-            net_amount = (
-                self.amount_total
-                - tax_data.get('total_isr_retencion', 0.0)
-                - tax_data.get('total_itbis_retenido', 0.0)
-            )
-            amount = self._digifact_format_amount(net_amount)
+            net = self.amount_total - tax_data.get('total_isr_retencion', 0.0) - tax_data.get('total_itbis_retenido', 0.0)
+            amount = self._ecf_format_amount(net)
         else:
-            amount = self._digifact_format_amount(self.amount_untaxed)
-
-        return [{
-            'Code': self.l10n_do_payment_type or '1',
-            'Amount': amount,
-        }]
+            amount = self._ecf_format_amount(self.amount_untaxed)
+        return [{'Code': self.l10n_do_payment_type or '1', 'Amount': amount}]
 
     # =========================================================================
-    # CONSTRUCTOR PRINCIPAL DEL PAYLOAD
+    # CONSTRUCTOR PRINCIPAL
     # =========================================================================
 
-    def _build_digifact_payload(self):
-        """Construye el dict completo del payload DigiFact para esta factura.
-        Este JSON es el que se envía al endpoint POST /EcfController/GenerarComprobante.
-
-        Returns:
-            dict: Payload completo listo para serializar a JSON.
+    def _build_ecf_payload(self):
+        """Construye el dict completo del payload JSON e-CF para esta factura.
+        Todos los importes se leen de Odoo sin recálculo propio.
         """
         self.ensure_one()
 
-        doc_type = self._digifact_get_doc_type()
+        doc_type = self._ecf_get_doc_type()
 
-        # Validaciones previas
         if not self.name or self.name == '/':
-            raise UserError(_(
-                'La factura debe tener un nombre válido (NumeroFacturaInterna) antes de generar el JSON.'
-            ))
+            raise UserError(_('La factura debe tener un nombre válido antes de generar el JSON e-CF.'))
 
         if doc_type in ('33', '34') and not self.l10n_do_ecf_modification_code:
-            raise UserError(_(
-                'Las Notas de Crédito/Débito (E33/E34) requieren un Código de Modificación.'
-            ))
+            raise UserError(_('Las Notas de Crédito/Débito (E33/E34) requieren un Código de Modificación.'))
 
-        # Extraer totales de impuestos una sola vez
-        tax_data = self._digifact_get_tax_totals(doc_type)
-
-        # Flag de ambiente (producción / test)
+        tax_data = self._ecf_get_tax_totals(doc_type)
         is_live_flag = '1' if getattr(self.company_id, 'is_live', False) else '0'
 
-        payload = {
+        return {
             'live': is_live_flag,
             'Version': '1.0',
             'CountryCode': 'DO',
             'IdUser': self.env.user.id,
             'TaxId': self.company_id.vat or '',
-            'Header': self._digifact_get_header(doc_type),
-            'Seller': self._digifact_get_seller(doc_type),
-            'Buyer': self._digifact_get_buyer(doc_type),
-            'Items': self._digifact_get_items(doc_type, tax_data),
-            'Totals': self._digifact_get_totals(doc_type, tax_data),
-            'Payments': self._digifact_get_payments(doc_type, tax_data),
-            'AdditionalDocumentInfo': self._digifact_get_additional_doc_info(doc_type, tax_data),
+            'Header': self._ecf_get_header(doc_type),
+            'Seller': self._ecf_get_seller(doc_type),
+            'Buyer': self._ecf_get_buyer(doc_type),
+            'Items': self._ecf_get_items(doc_type, tax_data),
+            'Totals': self._ecf_get_totals(doc_type, tax_data),
+            'Payments': self._ecf_get_payments(doc_type, tax_data),
+            'AdditionalDocumentInfo': self._ecf_get_additional_doc_info(doc_type, tax_data),
         }
 
-        return payload
-
     # =========================================================================
-    # ACCIÓN PARA EL WIZARD DE PREVISUALIZACIÓN
+    # ACCIÓN WIZARD DE PREVISUALIZACIÓN
     # =========================================================================
 
-    def action_preview_digifact_json(self):
-        """Abre el wizard mostrando el JSON generado para esta factura."""
+    def action_preview_ecf_json(self):
+        """Abre el wizard mostrando el JSON e-CF generado para esta factura."""
         self.ensure_one()
-
-        payload = self._build_digifact_payload()
+        payload = self._build_ecf_payload()
         json_str = json.dumps(payload, indent=4, ensure_ascii=False)
 
-        wizard = self.env['digifact.preview.wizard'].create({
+        wizard = self.env['l10n_do.ecf.preview.wizard'].create({
             'move_id': self.id,
             'json_preview': json_str,
         })
@@ -895,7 +747,7 @@ class AccountMove(models.Model):
         return {
             'type': 'ir.actions.act_window',
             'name': 'JSON e-CF: %s' % (self.name or ''),
-            'res_model': 'digifact.preview.wizard',
+            'res_model': 'l10n_do.ecf.preview.wizard',
             'view_mode': 'form',
             'res_id': wizard.id,
             'target': 'new',
