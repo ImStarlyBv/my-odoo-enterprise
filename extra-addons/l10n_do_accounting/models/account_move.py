@@ -247,6 +247,7 @@ class AccountMove(models.Model):
             and inv.l10n_latam_document_type_id
             and inv.country_code == "DO"
             and not inv.l10n_latam_manual_document_number
+            and not str(inv.l10n_latam_document_type_id.l10n_do_ncf_type or "").startswith("e-")
         )
         for invoice in l10n_do_internal_invoices:
             invoice.l10n_do_enable_first_sequence = (
