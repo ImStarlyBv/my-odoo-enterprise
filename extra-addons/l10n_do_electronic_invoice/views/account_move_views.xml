@@ -15,7 +15,7 @@
             </xpath>
 
             <!-- Campos adicionales en la pestaña 'Otra Info' -->
-            <xpath expr="//page[@id='other_tab']//group[@id='other_tab_group_1']" position="inside">
+            <xpath expr="//page[@id='other_tab']//group[@id='other_tab_group']" position="inside">
                 <group string="Facturación Electrónica (e-CF)" invisible="not is_ecf_invoice">
                     <!-- Estado y tasa de cambio -->
                     <field name="ecf_validation_status"/>

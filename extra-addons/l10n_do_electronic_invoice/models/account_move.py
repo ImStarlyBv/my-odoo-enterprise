@@ -474,7 +474,7 @@ class AccountMove(models.Model):
         state_code = company.state_id.l10n_do_dgii_code if company.state_id and hasattr(company.state_id, 'l10n_do_dgii_code') else ''
 
         return {
-            'TaxID': company.vat or '',
+            'TaxID': self._ecf_sanitize_tax_id(company.vat),
             'Name': company.name or '',
             'Contact': {
                 'PhoneList': {'Phone': self._ecf_extract_phones(company)},
@@ -492,6 +492,10 @@ class AccountMove(models.Model):
                 },
             },
         }
+
+    def _ecf_sanitize_tax_id(self, vat):
+        """Removes dashes and non-numeric chars from TaxID per DGII spec."""
+        return re.sub(r'[^0-9]', '', vat or '')
 
     def _ecf_get_buyer(self, doc_type):
         self.ensure_one()
@@ -516,7 +520,7 @@ class AccountMove(models.Model):
             return {'TaxID': 'NO_APLICA'}
 
         return {
-            'TaxID': partner.vat or '',
+            'TaxID': self._ecf_sanitize_tax_id(partner.vat),
             'Name': partner.name or '',
             'Contact': {
                 'PhoneList': {'Phone': self._ecf_extract_phones(partner)},
@@ -550,7 +554,7 @@ class AccountMove(models.Model):
             item = {
                 'Codes': self._ecf_get_item_codes(product),
                 'Type': self._ecf_get_item_type(line, doc_type),
-                'Description': line.name or (product.name if product else 'SIN_DESCRIPCION'),
+                'Description': (line.name or (product.name if product else 'SIN_DESCRIPCION'))[:80],
                 'Qty': self._ecf_format_amount(line.quantity),
                 'UnitOfMeasure': (
                     product.uom_id.l10n_do_dgii_code
@@ -719,7 +723,7 @@ class AccountMove(models.Model):
             'Version': '1.0',
             'CountryCode': 'DO',
             'IdUser': self.env.user.id,
-            'TaxId': self.company_id.vat or '',
+            'TaxId': self._ecf_sanitize_tax_id(self.company_id.vat),
             'Header': self._ecf_get_header(doc_type),
             'Seller': self._ecf_get_seller(doc_type),
             'Buyer': self._ecf_get_buyer(doc_type),
