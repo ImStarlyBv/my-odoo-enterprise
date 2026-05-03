@@ -340,8 +340,6 @@ class AccountMove(models.Model):
         - self.line_ids (display_type='tax'): importes reales del asiento contable
         - line.price_subtotal: base por línea ya calculada por Odoo
 
-        No se llama compute_all en ningún caso.
-
         Retorna dict con:
           total_taxes          lista TotalTax para el JSON
           total_itbis          suma ITBIS positivo
@@ -530,8 +528,8 @@ class AccountMove(models.Model):
 
         additional_info.append({'Name': 'InformacionAdicionalEmisor', 'Value': self.l10n_do_additional_seller_info or ''})
 
-        district_code = company.l10n_do_municipality_id.code if hasattr(company, 'l10n_do_municipality_id') and company.l10n_do_municipality_id else ''
-        state_code = company.state_id.l10n_do_dgii_code if company.state_id and hasattr(company.state_id, 'l10n_do_dgii_code') else ''
+        district_code = company.l10n_do_municipality_id.code if hasattr(company, 'l10n_do_municipality_id') and company.l10n_do_municipality_id else '010100'
+        state_code = company.state_id.l10n_do_dgii_code if company.state_id and hasattr(company.state_id, 'l10n_do_dgii_code') else '010000'
 
         return {
             'TaxID': self._ecf_sanitize_tax_id(company.vat),
@@ -593,8 +591,8 @@ class AccountMove(models.Model):
         }
 
     def _ecf_get_address_info(self, partner):
-        district_code = partner.l10n_do_municipality_id.code if hasattr(partner, 'l10n_do_municipality_id') and partner.l10n_do_municipality_id else ''
-        state_code = partner.state_id.l10n_do_dgii_code if partner.state_id and hasattr(partner.state_id, 'l10n_do_dgii_code') else ''
+        district_code = partner.l10n_do_municipality_id.code if hasattr(partner, 'l10n_do_municipality_id') and partner.l10n_do_municipality_id else '010100'
+        state_code = partner.state_id.l10n_do_dgii_code if partner.state_id and hasattr(partner.state_id, 'l10n_do_dgii_code') else '010000'
         return {
             'Address': partner.street or '',
             'District': district_code,
