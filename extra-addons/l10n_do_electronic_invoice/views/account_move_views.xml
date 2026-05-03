@@ -5,13 +5,18 @@
         <field name="inherit_id" ref="account.view_move_form"/>
         <field name="arch" type="xml">
 
-            <!-- Botón "Ver JSON e-CF" en la cabecera de la factura -->
+            <!-- Botones ECF en la cabecera de la factura -->
             <xpath expr="//header" position="inside">
                 <button name="action_preview_ecf_json"
                         type="object"
                         string="Ver JSON e-CF"
                         class="btn-secondary"
                         invisible="not is_ecf_invoice"/>
+                <button name="action_view_ecf_error"
+                        type="object"
+                        string="Ver Respuesta API"
+                        class="btn-danger"
+                        invisible="ecf_validation_status != 'error'"/>
             </xpath>
 
             <!-- Campos adicionales en la pestaña 'Otra Info' -->
@@ -21,6 +26,10 @@
                     <field name="ecf_validation_status"/>
                     <field name="l10n_do_currency_rate" invisible="not show_exchange_rate"/>
                     <field name="show_exchange_rate" invisible="1"/>
+                    <!-- Respuesta de la API (readonly) -->
+                    <field name="ecf_track_id" readonly="1" invisible="not ecf_track_id"/>
+                    <field name="ecf_codigo_seguridad" readonly="1" invisible="not ecf_codigo_seguridad"/>
+                    <field name="ecf_fecha_firma" readonly="1" invisible="not ecf_fecha_firma"/>
                     <!-- Datos del pago y documento -->
                     <field name="l10n_do_payment_type"/>
                     <field name="l10n_do_indicador_monto_gravado"/>
@@ -37,6 +46,12 @@
                     <field name="ecf_api_message"
                            readonly="1"
                            invisible="not ecf_api_message"/>
+                </group>
+                <!-- QR de verificación DGII -->
+                <group string="Código QR DGII"
+                       invisible="not is_ecf_invoice or not ecf_qr_image">
+                    <field name="ecf_qr_image" widget="image" readonly="1" nolabel="1"
+                           options="{'size': [120, 120]}"/>
                 </group>
             </xpath>
 

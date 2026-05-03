@@ -11,6 +11,10 @@
                            style="height: 450px; font-family: monospace; white-space: pre-wrap;"/>
                 </group>
                 <footer>
+                    <button name="action_send_ecf"
+                            type="object"
+                            string="Enviar a DGII"
+                            class="btn-primary"/>
                     <button string="Cerrar" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>

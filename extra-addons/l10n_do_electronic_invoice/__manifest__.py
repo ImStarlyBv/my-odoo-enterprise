@@ -11,7 +11,9 @@
     'data': [
         'security/ir.model.access.csv',
         'wizard/ecf_preview_wizard_views.xml',
+        'wizard/ecf_error_wizard_views.xml',
         'views/res_company_views.xml',
+        'views/ecf_doc_type_config_views.xml',
         'views/account_move_views.xml',
         'views/res_partner_views.xml',
         'data/l10n_do.municipality.csv',

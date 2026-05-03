@@ -51,3 +51,38 @@ class ResCompany(models.Model):
         default="0001",
         help="Código de sucursal para BranchInfo.Name (Normalmente '0001')"
     )
+
+    ecf_doc_type_config_ids = fields.One2many(
+        comodel_name='l10n_do.ecf.doc.type.config',
+        inverse_name='company_id',
+        string='Tipos de Comprobante',
+    )
+
+    def action_init_ecf_doc_type_config(self):
+        """Crea los registros de configuración para los 10 tipos e-CF si no existen.
+        Idempotente: no modifica registros ya existentes.
+        """
+        doc_types = ['31', '32', '33', '34', '41', '43', '44', '45', '46', '47']
+        Config = self.env['l10n_do.ecf.doc.type.config']
+        for company in self:
+            existing = Config.search([('company_id', '=', company.id)]).mapped('doc_type')
+            missing = [t for t in doc_types if t not in existing]
+            for doc_type in missing:
+                Config.create({'company_id': company.id, 'doc_type': doc_type, 'send_to_dgii': True})
+
+    # Conexión con api.ecf-software.online
+    ecf_api_url = fields.Char(
+        string="URL de la API ECF",
+        default="https://api.ecf-software.online",
+        help="Endpoint base de la API de facturación electrónica.",
+    )
+    ecf_api_key = fields.Char(
+        string="API Key (Bearer Token)",
+        password=True,
+        help="Token de autenticación emitido por api.ecf-software.online. Se emite una sola vez.",
+    )
+    ecf_auto_send = fields.Boolean(
+        string="Envío Automático al Confirmar",
+        default=True,
+        help="Si está activo, al confirmar una factura e-CF se envía automáticamente a la API.",
+    )

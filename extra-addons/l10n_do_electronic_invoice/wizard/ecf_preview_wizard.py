@@ -9,5 +9,7 @@ class EcfPreviewWizard(models.TransientModel):
     json_preview = fields.Text(string='Cuerpo del JSON (e-CF)', readonly=True)
 
     def action_send_ecf(self):
-        """Placeholder para el envío al API del proveedor de e-CF."""
-        pass
+        """Delega el envío al método del modelo y cierra el wizard."""
+        self.ensure_one()
+        self.move_id.action_send_ecf()
+        return {'type': 'ir.actions.act_window_close'}

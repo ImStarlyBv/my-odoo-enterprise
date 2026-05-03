@@ -1,6 +1,10 @@
+import base64
 import json
 import re
 from datetime import date
+from io import BytesIO
+
+import requests
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
@@ -51,6 +55,10 @@ class AccountMove(models.Model):
             ('pending', 'Pendiente'),
             ('success', 'Validado'),
             ('error', 'Error'),
+            ('3', 'En Proceso'),
+            ('4', 'Aceptado Condicional'),
+            ('rfce', 'RFCE (sin DGII)'),
+            ('skipped', 'No enviado (deshabilitado)'),
         ],
         string='Estado e-CF',
         default='pending',
@@ -61,8 +69,33 @@ class AccountMove(models.Model):
         string='Mensaje API DGII',
         copy=False,
     )
-    ecf_qr_code = fields.Text(
-        string='Código QR e-CF',
+    ecf_track_id = fields.Char(
+        string='Track ID (DGII)',
+        readonly=True,
+        store=True,
+        copy=False,
+    )
+    ecf_qr_url = fields.Char(
+        string='URL QR e-CF',
+        readonly=True,
+        store=True,
+        copy=False,
+    )
+    ecf_qr_image = fields.Binary(
+        string='Imagen QR e-CF',
+        readonly=True,
+        store=True,
+        copy=False,
+    )
+    ecf_codigo_seguridad = fields.Char(
+        string='Código de Seguridad',
+        readonly=True,
+        store=True,
+        copy=False,
+    )
+    ecf_fecha_firma = fields.Datetime(
+        string='Fecha de Firma',
+        readonly=True,
         store=True,
         copy=False,
     )
@@ -268,6 +301,33 @@ class AccountMove(models.Model):
     def _ecf_get_ref_invoice(self):
         self.ensure_one()
         return self.reversed_entry_id or self.debit_origin_id or self.env['account.move']
+
+    def _ecf_should_send(self):
+        """Devuelve True si el tipo de comprobante está habilitado para envío a la DGII.
+        Si no existe registro de configuración para el tipo, se asume True.
+        """
+        self.ensure_one()
+        config = self.env['l10n_do.ecf.doc.type.config'].search([
+            ('company_id', '=', self.company_id.id),
+            ('doc_type', '=', self._ecf_get_doc_type()),
+        ], limit=1)
+        return config.send_to_dgii if config else True
+
+    def _ecf_generate_qr_image(self):
+        """Lee ecf_qr_url, genera PNG con qrcode y lo guarda en base64 en ecf_qr_image.
+        Si la librería qrcode no está instalada, omite silenciosamente.
+        """
+        self.ensure_one()
+        if not self.ecf_qr_url:
+            return
+        try:
+            import qrcode
+        except ImportError:
+            return
+        qr = qrcode.make(self.ecf_qr_url)
+        buf = BytesIO()
+        qr.save(buf, format='PNG')
+        self.ecf_qr_image = base64.b64encode(buf.getvalue())
 
     # =========================================================================
     # EXTRACCIÓN DE TOTALES DE IMPUESTOS (Odoo 18, sin recalcular)
@@ -736,6 +796,80 @@ class AccountMove(models.Model):
     # =========================================================================
     # ACCIÓN WIZARD DE PREVISUALIZACIÓN
     # =========================================================================
+
+    def action_send_ecf(self):
+        """Envía el payload e-CF a api.ecf-software.online y persiste la respuesta."""
+        self.ensure_one()
+
+        # Verificar si el tipo está habilitado para envío en la configuración de la empresa
+        if not self._ecf_should_send():
+            self.write({
+                'ecf_validation_status': 'skipped',
+                'ecf_api_message': 'Tipo de comprobante deshabilitado en la configuración de la empresa.',
+            })
+            return
+
+        # Validación previa: E32 ≥ 250,000 DOP exige RNC del comprador
+        if self._ecf_get_doc_type() == '32' and self.amount_total >= 250000:
+            if not self.partner_id.vat:
+                raise UserError(_(
+                    'E32 con monto ≥ 250,000 DOP requiere que el cliente tenga RNC o Cédula.'
+                ))
+
+        api_url = (self.company_id.ecf_api_url or '').rstrip('/')
+        api_key = self.company_id.ecf_api_key
+        if not api_url or not api_key:
+            raise UserError(_('Configure la URL y el API Key ECF en la empresa antes de enviar.'))
+
+        payload = self._build_ecf_payload()
+
+        try:
+            response = requests.post(
+                f'{api_url}/api/factura/generar-comprobante',
+                json=payload,
+                headers={'Authorization': f'Bearer {api_key}'},
+                timeout=30,
+            )
+            data = response.json()
+        except Exception as e:
+            self.write({
+                'ecf_api_message': str(e),
+                'ecf_validation_status': 'error',
+            })
+            return
+
+        if response.ok:
+            qr_url = data.get('qrUrl') or ''
+            self.write({
+                'ecf_track_id': data.get('trackId'),
+                'ecf_qr_url': qr_url,
+                'ecf_codigo_seguridad': data.get('codigoSeguridad'),
+                'ecf_api_message': str(data),
+                'ecf_validation_status': data.get('estado') or 'rfce',
+            })
+            if qr_url:
+                self._ecf_generate_qr_image()
+        else:
+            self.write({
+                'ecf_api_message': data.get('error', str(data)),
+                'ecf_validation_status': 'error',
+            })
+
+    def action_view_ecf_error(self):
+        """Abre un wizard con la última respuesta cruda de la API. Solo visible en estado error."""
+        self.ensure_one()
+        wizard = self.env['l10n_do.ecf.error.wizard'].create({
+            'move_id': self.id,
+            'api_response': self.ecf_api_message or '(sin respuesta registrada)',
+        })
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Respuesta API — %s' % (self.name or ''),
+            'res_model': 'l10n_do.ecf.error.wizard',
+            'view_mode': 'form',
+            'res_id': wizard.id,
+            'target': 'new',
+        }
 
     def action_preview_ecf_json(self):
         """Abre el wizard mostrando el JSON e-CF generado para esta factura."""

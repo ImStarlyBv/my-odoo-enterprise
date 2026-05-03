@@ -1,0 +1,19 @@
+<odoo>
+    <record id="ecf_error_wizard_form" model="ir.ui.view">
+        <field name="name">l10n_do.ecf.error.wizard.form</field>
+        <field name="model">l10n_do.ecf.error.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Última respuesta de la API ECF">
+                <group>
+                    <field name="api_response"
+                           nolabel="1"
+                           widget="text"
+                           style="height: 350px; font-family: monospace; white-space: pre-wrap;"/>
+                </group>
+                <footer>
+                    <button string="Cerrar" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
