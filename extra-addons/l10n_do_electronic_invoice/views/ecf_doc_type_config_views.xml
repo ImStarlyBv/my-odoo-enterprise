@@ -1,14 +1,14 @@
 <odoo>
-    <!-- Vista list standalone (opcional, para acceso desde menú de contabilidad) -->
+    <!-- Vista list usada como inline en la empresa y como standalone -->
     <record id="view_ecf_doc_type_config_tree" model="ir.ui.view">
         <field name="name">l10n_do.ecf.doc.type.config.tree</field>
         <field name="model">l10n_do.ecf.doc.type.config</field>
         <field name="arch" type="xml">
-            <tree editable="bottom">
-                <field name="company_id" groups="base.group_multi_company"/>
+            <list editable="bottom">
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
                 <field name="doc_type"/>
                 <field name="send_to_dgii" widget="boolean_toggle"/>
-            </tree>
+            </list>
         </field>
     </record>
 </odoo>

@@ -20,12 +20,8 @@
                                     string="Inicializar tipos de comprobante"
                                     class="btn-secondary mb-2"
                                     invisible="ecf_doc_type_config_ids != []"/>
-                            <field name="ecf_doc_type_config_ids" nolabel="1">
-                                <tree editable="bottom">
-                                    <field name="doc_type"/>
-                                    <field name="send_to_dgii" widget="boolean_toggle"/>
-                                </tree>
-                            </field>
+                            <field name="ecf_doc_type_config_ids" nolabel="1"
+                                   context="{'default_company_id': id}"/>
                         </group>
                         <group string="Datos del Emisor">
                             <field name="l10n_do_trade_name"/>
