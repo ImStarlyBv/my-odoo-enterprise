@@ -248,10 +248,10 @@ class AccountMove(models.Model):
 
     def _ecf_get_item_codes(self, product):
         if product.barcode:
-            return [{'Name': 'EAN', 'Value': product.barcode}]
+            return [{'name': 'EAN', 'value': product.barcode}]
         if product.default_code:
-            return [{'Name': 'PLU', 'Value': product.default_code}]
-        return [{'Name': 'SIN_CODIGO', 'Value': '0'}]
+            return [{'name': 'PLU', 'value': product.default_code}]
+        return [{'name': 'SIN_CODIGO', 'value': '0'}]
 
     def _ecf_get_item_type(self, line, doc_type):
         """Tipo de ítem DGII: '1' = Bien, '2' = Servicio."""
@@ -393,30 +393,30 @@ class AccountMove(models.Model):
             if not codes_on_line:
                 total_exempt += abs(float(line.price_subtotal or 0.0))
 
-        # Construir lista formateada
+        # Construir lista formateada (camelCase según spec de la API)
         total_tax_list = []
         for code in sorted(itbis_groups.keys()):
             entry = itbis_groups[code]
             total_tax_list.append({
-                'Code': entry['Code'],
-                'TaxableAmount': self._ecf_format_amount(entry['TaxableAmount']),
-                'Rate': self._ecf_format_amount(entry['Rate']),
-                'Amount': self._ecf_format_amount(entry['Amount']),
+                'code': entry['Code'],
+                'taxableAmount': self._ecf_format_amount(entry['TaxableAmount']),
+                'rate': self._ecf_format_amount(entry['Rate']),
+                'amount': self._ecf_format_amount(entry['Amount']),
             })
 
         if total_exempt > 0:
             total_tax_list.append({
-                'Code': 'EXENTO',
-                'Amount': self._ecf_format_amount(total_exempt),
+                'code': 'EXENTO',
+                'amount': self._ecf_format_amount(total_exempt),
             })
 
         # Sin impuestos ni exentos pero con base → ITBIS3 a 0%
         if not total_tax_list and self.amount_untaxed:
             total_tax_list.append({
-                'Code': 'ITBIS3',
-                'TaxableAmount': self._ecf_format_amount(self.amount_untaxed),
-                'Rate': '0.00',
-                'Amount': '0.00',
+                'code': 'ITBIS3',
+                'taxableAmount': self._ecf_format_amount(self.amount_untaxed),
+                'rate': '0.00',
+                'amount': '0.00',
             })
 
         # Retenciones por línea: price_subtotal × tasa (sin compute_all)
@@ -456,14 +456,14 @@ class AccountMove(models.Model):
         inv_date = self.invoice_date or date.today()
 
         additional_info = [
-            {'Name': 'Secuencia', 'Value': self._ecf_get_sequence()},
+            {'name': 'Secuencia', 'value': self._ecf_get_sequence()},
         ]
 
         # FechaVencimientoSecuencia: excluir para 32 y 34
         if doc_type not in ('32', '34'):
             ncf_expiry = self._ecf_get_ncf_expiry_date()
             if ncf_expiry:
-                additional_info.append({'Name': 'FechaVencimientoSecuencia', 'Value': ncf_expiry})
+                additional_info.append({'name': 'FechaVencimientoSecuencia', 'value': ncf_expiry})
 
         # IndicadorNotaCredito: solo para tipo 34
         if doc_type == '34':
@@ -471,38 +471,40 @@ class AccountMove(models.Model):
             indicator = '0'
             if ref_invoice and ref_invoice.invoice_date:
                 indicator = '1' if (inv_date - ref_invoice.invoice_date).days > 30 else '0'
-            additional_info.append({'Name': 'IndicadorNotaCredito', 'Value': indicator})
+            additional_info.append({'name': 'IndicadorNotaCredito', 'value': indicator})
 
-        # IndicadorEnvioDiferido: excluir para 41, 47, 43
-        if doc_type not in ('41', '47', '43'):
-            additional_info.append({'Name': 'IndicadorEnvioDiferido', 'Value': '1'})
+        # IndicadorEnvioDiferido: excluir solo para 43
+        if doc_type != '43':
+            additional_info.append({'name': 'IndicadorEnvioDiferido', 'value': '1'})
 
-        # IndicadorMontoGravado: excluir para 43, 44, 46, 47
-        if doc_type not in ('43', '44', '46', '47'):
+        # IndicadorMontoGravado: excluir para 43
+        if doc_type != '43':
             additional_info.append({
-                'Name': 'IndicadorMontoGravado',
-                'Value': self.l10n_do_indicador_monto_gravado or '0',
+                'name': 'IndicadorMontoGravado',
+                'value': self.l10n_do_indicador_monto_gravado or '0',
             })
 
         # TipoIngresos: excluir para 41, 43, 47
         if doc_type not in ('41', '43', '47'):
             additional_info.append({
-                'Name': 'TipoIngresos',
-                'Value': self.l10n_do_income_type or '01',
+                'name': 'TipoIngresos',
+                'value': self.l10n_do_income_type or '01',
             })
 
-        additional_info.append({'Name': 'TipoPago', 'Value': self.l10n_do_payment_type or '1'})
+        # TipoPago: excluir para 43
+        if doc_type != '43':
+            additional_info.append({'name': 'TipoPago', 'value': self.l10n_do_payment_type or '1'})
 
-        # FechaDesde / FechaHasta: excluir para 41, 43
-        if doc_type not in ('41', '43'):
-            additional_info.append({'Name': 'FechaDesde', 'Value': inv_date.strftime('%Y-%m-%d')})
+        # FechaDesde / FechaHasta: excluir para 43
+        if doc_type != '43':
+            additional_info.append({'name': 'FechaDesde', 'value': inv_date.strftime('%Y-%m-%d')})
             end_date = self.invoice_date_due or inv_date
-            additional_info.append({'Name': 'FechaHasta', 'Value': end_date.strftime('%Y-%m-%d')})
+            additional_info.append({'name': 'FechaHasta', 'value': end_date.strftime('%Y-%m-%d')})
 
         return {
-            'DocType': doc_type,
-            'IssuedDateTime': inv_date.strftime('%Y-%m-%dT00:00:00'),
-            'AdditionalIssueDocInfo': additional_info,
+            'docType': doc_type,
+            'issuedDateTime': inv_date.strftime('%Y-%m-%dT00:00:00'),
+            'additionalIssueDocInfo': additional_info,
         }
 
     def _ecf_get_seller(self, doc_type):
@@ -510,43 +512,43 @@ class AccountMove(models.Model):
         company = self.company_id
 
         additional_info = [
-            {'Name': 'NombreComercial', 'Value': company.l10n_do_trade_name or company.name or ''},
-            {'Name': 'ActividadEconomica', 'Value': company.l10n_do_economic_activity or ''},
+            {'name': 'NombreComercial', 'value': company.l10n_do_trade_name or company.name or ''},
+            {'name': 'ActividadEconomica', 'value': company.l10n_do_economic_activity or ''},
         ]
 
         if doc_type not in ('41', '43', '47'):
-            additional_info.append({'Name': 'CodigoVendedor', 'Value': self.l10n_do_seller_code or ''})
+            additional_info.append({'name': 'CodigoVendedor', 'value': self.l10n_do_seller_code or ''})
 
         additional_info.extend([
-            {'Name': 'NumeroFacturaInterna', 'Value': self.name or ''},
-            {'Name': 'NumeroPedidoInterno', 'Value': self.l10n_do_purchase_order_number or self.invoice_origin or self.name or ''},
+            {'name': 'NumeroFacturaInterna', 'value': self.name or ''},
+            {'name': 'NumeroPedidoInterno', 'value': self.l10n_do_purchase_order_number or self.invoice_origin or self.name or ''},
         ])
 
         if doc_type not in ('41', '43', '47'):
-            additional_info.append({'Name': 'ZonaVenta', 'Value': self.l10n_do_sales_zone or ''})
-            additional_info.append({'Name': 'RutaVenta', 'Value': self.l10n_do_sales_route or ''})
+            additional_info.append({'name': 'ZonaVenta', 'value': self.l10n_do_sales_zone or ''})
+            additional_info.append({'name': 'RutaVenta', 'value': self.l10n_do_sales_route or ''})
 
-        additional_info.append({'Name': 'InformacionAdicionalEmisor', 'Value': self.l10n_do_additional_seller_info or ''})
+        additional_info.append({'name': 'InformacionAdicionalEmisor', 'value': self.l10n_do_additional_seller_info or ''})
 
         district_code = company.l10n_do_municipality_id.code if hasattr(company, 'l10n_do_municipality_id') and company.l10n_do_municipality_id else '010100'
         state_code = company.state_id.l10n_do_dgii_code if company.state_id and hasattr(company.state_id, 'l10n_do_dgii_code') else '010000'
 
         return {
-            'TaxID': self._ecf_sanitize_tax_id(company.vat),
-            'Name': company.name or '',
-            'Contact': {
-                'PhoneList': {'Phone': self._ecf_extract_phones(company)},
-                'EmailList': {'Email': self._ecf_extract_emails(company)},
-                'Website': company.website or '',
+            'taxID': self._ecf_sanitize_tax_id(company.vat),
+            'name': company.name or '',
+            'contact': {
+                'phoneList': {'phone': self._ecf_extract_phones(company)},
+                'emailList': {'email': self._ecf_extract_emails(company)},
+                'website': company.website or '',
             },
-            'AdditionlInfo': additional_info,
-            'BranchInfo': {
-                'Name': company.l10n_do_branch_code or '0001',
-                'AddressInfo': {
-                    'Address': company.street or '',
-                    'District': district_code,
-                    'State': state_code,
-                    'Country': 'DO',
+            'additionlInfo': additional_info,
+            'branchInfo': {
+                'name': company.l10n_do_branch_code or '0001',
+                'addressInfo': {
+                    'address': company.street or '',
+                    'district': district_code,
+                    'state': state_code,
+                    'country': 'DO',
                 },
             },
         }
@@ -562,42 +564,38 @@ class AccountMove(models.Model):
 
         if doc_type in ('43', '47'):
             return {
-                'TaxID': 'NO_APLICA',
-                'Name': '' if doc_type == '43' else (partner.name or ''),
-                'Contact': {
-                    'PhoneList': {'Phone': self._ecf_extract_phones(partner)},
-                    'EmailList': {'Email': self._ecf_extract_emails(partner)},
+                'taxID': 'NO_APLICA',
+                'name': '' if doc_type == '43' else (partner.name or ''),
+                'contact': {
+                    'phoneList': {'phone': self._ecf_extract_phones(partner)},
+                    'emailList': {'email': self._ecf_extract_emails(partner)},
                 },
-                'AdditionlInfo': [
-                    {'Name': 'InformacionAdicionalComprador', 'Value': 'Detalles adicionales'},
-                ],
-                'AddressInfo': self._ecf_get_address_info(partner),
+                'additionlInfo': [],
+                'addressInfo': self._ecf_get_address_info(partner),
             }
 
         if is_consumer:
-            return {'TaxID': 'NO_APLICA'}
+            return {'taxID': 'NO_APLICA'}
 
         return {
-            'TaxID': self._ecf_sanitize_tax_id(partner.vat),
-            'Name': partner.name or '',
-            'Contact': {
-                'PhoneList': {'Phone': self._ecf_extract_phones(partner)},
-                'EmailList': {'Email': self._ecf_extract_emails(partner)},
+            'taxID': self._ecf_sanitize_tax_id(partner.vat),
+            'name': partner.name or '',
+            'contact': {
+                'phoneList': {'phone': self._ecf_extract_phones(partner)},
+                'emailList': {'email': self._ecf_extract_emails(partner)},
             },
-            'AdditionlInfo': [
-                {'Name': 'InformacionAdicionalComprador', 'Value': 'Detalles adicionales'},
-            ],
-            'AddressInfo': self._ecf_get_address_info(partner),
+            'additionlInfo': [],
+            'addressInfo': self._ecf_get_address_info(partner),
         }
 
     def _ecf_get_address_info(self, partner):
         district_code = partner.l10n_do_municipality_id.code if hasattr(partner, 'l10n_do_municipality_id') and partner.l10n_do_municipality_id else '010100'
         state_code = partner.state_id.l10n_do_dgii_code if partner.state_id and hasattr(partner.state_id, 'l10n_do_dgii_code') else '010000'
         return {
-            'Address': partner.street or '',
-            'District': district_code,
-            'State': state_code,
-            'Country': 'DO',
+            'address': partner.street or '',
+            'district': district_code,
+            'state': state_code,
+            'country': 'DO',
         }
 
     def _ecf_get_items(self, doc_type, tax_data):
@@ -610,16 +608,16 @@ class AccountMove(models.Model):
             price_unit = self._ecf_get_price_unit_without_tax(line)
 
             item = {
-                'Codes': self._ecf_get_item_codes(product),
-                'Type': self._ecf_get_item_type(line, doc_type),
-                'Description': (line.name or (product.name if product else 'SIN_DESCRIPCION'))[:80],
-                'Qty': self._ecf_format_amount(line.quantity),
-                'UnitOfMeasure': (
+                'codes': self._ecf_get_item_codes(product),
+                'type': self._ecf_get_item_type(line, doc_type),
+                'description': (line.name or (product.name if product else 'SIN_DESCRIPCION'))[:80],
+                'qty': self._ecf_format_amount(line.quantity),
+                'unitOfMeasure': (
                     product.uom_id.l10n_do_dgii_code
                     if product and product.uom_id and hasattr(product.uom_id, 'l10n_do_dgii_code') and product.uom_id.l10n_do_dgii_code
-                    else '32'
+                    else '43'
                 ),
-                'Price': self._ecf_format_amount(price_unit),
+                'price': self._ecf_format_amount(price_unit),
             }
 
             # Discounts y Charges: excluir para 43 y 47
@@ -627,33 +625,38 @@ class AccountMove(models.Model):
                 discount_rate = float(line.discount or 0.0)
                 if discount_rate > 0:
                     discount_amount = float(line.price_unit or 0.0) * (discount_rate / 100.0) * float(line.quantity or 0.0)
-                    item['Discounts'] = {
-                        'Discount': [{'Code': '%', 'Amount': self._ecf_format_amount(discount_amount), 'Rate': self._ecf_format_amount(discount_rate)}],
+                    item['discounts'] = {
+                        'discount': [{'code': '%', 'amount': self._ecf_format_amount(discount_amount), 'rate': self._ecf_format_amount(discount_rate)}],
                     }
                 else:
-                    item['Discounts'] = {
-                        'Discount': [{'Code': '$', 'Amount': '0.00', 'Rate': '0.00'}],
+                    item['discounts'] = {
+                        'discount': [{'code': '$', 'amount': '0.00', 'rate': '0.00'}],
                     }
-                item['Charges'] = {'Charge': [{'Code': '$', 'Amount': '0.00'}]}
+                item['charges'] = {'charge': [{'code': '$', 'amount': '0.00'}]}
 
-            item['Totals'] = {'TotalItem': self._ecf_format_amount(line.price_subtotal)}
+            item['totals'] = {'totalItem': self._ecf_format_amount(line.price_subtotal)}
 
             retention = tax_data.get('line_retentions', {}).get(line.id, {})
             additional_info = [
-                {'Name': 'DescripcionItem', 'Value': product.name if product else ''},
-                {'Name': 'IndicadorFacturacion', 'Value': self._ecf_get_indicador_facturacion(doc_type, line)},
-                {'Name': 'MontoISRRetenido', 'Value': retention.get('MontoISRRetenido', '0.00')},
+                {'name': 'DescripcionItem', 'value': product.name if product else ''},
+                {'name': 'IndicadorFacturacion', 'value': self._ecf_get_indicador_facturacion(doc_type, line)},
             ]
 
+            # MontoISRRetenido: solo cuando hay monto (se omite cuando es "0.00")
+            isr_retenido = retention.get('MontoISRRetenido', '0.00')
+            if doc_type not in ('47',) and float(isr_retenido) > 0:
+                additional_info.append({'name': 'MontoISRRetenido', 'value': isr_retenido})
+
             if doc_type in ('41', '47'):
-                additional_info.append({'Name': 'IndicadorAgenteRetencionPercepcion', 'Value': '1'})
+                # nombre correcto del campo: IndicadorAgenteRetencionoPercepcion (con 'o')
+                additional_info.append({'name': 'IndicadorAgenteRetencionoPercepcion', 'value': '1'})
                 if doc_type == '41':
                     additional_info.append({
-                        'Name': 'MontoITBISRetenido',
-                        'Value': retention.get('MontoITBISRetenido', '0.00'),
+                        'name': 'MontoITBISRetenido',
+                        'value': retention.get('MontoITBISRetenido', '0.00'),
                     })
 
-            item['AdditionalInfo'] = additional_info
+            item['additionalInfo'] = additional_info
             items.append(item)
 
         return items
@@ -663,97 +666,84 @@ class AccountMove(models.Model):
         product_lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
 
         totals = {
-            'QtyItems': len(product_lines),
-            'TotalTaxableAmount': self._ecf_format_amount(self.amount_untaxed),
+            'qtyItems': len(product_lines),
+            'totalTaxableAmount': self._ecf_format_amount(self.amount_untaxed),
         }
 
         if doc_type == '47':
-            totals['TotalTaxes'] = {
-                'TotalTax': [{'Code': 'EXENTO', 'Amount': self._ecf_format_amount(self.amount_total)}],
+            totals['totalTaxes'] = {
+                'totalTax': [{'code': 'EXENTO', 'amount': self._ecf_format_amount(self.amount_total)}],
             }
         else:
-            totals['TotalTaxes'] = {'TotalTax': tax_data.get('total_taxes', [])}
+            totals['totalTaxes'] = {'totalTax': tax_data.get('total_taxes', [])}
 
-        totals['GrandTotal'] = {'InvoiceTotal': self._ecf_format_amount(self.amount_total)}
+        totals['grandTotal'] = {'invoiceTotal': self._ecf_format_amount(self.amount_total)}
 
+        # E41 requiere TotalITBISRetenido y TotalISRRetencion (XSD obliga, no tienen default)
         if doc_type in ('41', '47'):
             totals_additional = [
-                {'Name': 'TotalISRRetencion', 'Value': self._ecf_format_amount(tax_data.get('total_isr_retencion', 0.0))},
+                {'name': 'TotalISRRetencion', 'value': self._ecf_format_amount(tax_data.get('total_isr_retencion', 0.0))},
             ]
             if doc_type == '41':
                 totals_additional.append({
-                    'Name': 'TotalITBISRetenido',
-                    'Value': self._ecf_format_amount(tax_data.get('total_itbis_retenido', 0.0)),
+                    'name': 'TotalITBISRetenido',
+                    'value': self._ecf_format_amount(tax_data.get('total_itbis_retenido', 0.0)),
                 })
-            totals['AdditionalInfo'] = totals_additional
+            totals['additionalInfo'] = totals_additional
 
         return totals
 
     def _ecf_get_additional_doc_info(self, doc_type, tax_data):
         self.ensure_one()
 
-        if doc_type in ('44', '47'):
+        # Tipos que no usan additionalDocumentInfo
+        if doc_type in ('43', '44', '47'):
             return {}
-
-        if doc_type == '43':
-            return {
-                'AdditionalInfo': [{
-                    'AditionalData': {
-                        'Data': [{'Info': [{'Name': 'NombrePuertoSalida', 'Value': 'Puerto'}], 'Name': '', 'Id': 0}],
-                    },
-                }],
-            }
 
         data_blocks = []
 
-        # Bloque SUBTOTALES: para todos excepto 46
-        if doc_type != '46':
-            subtotals_info = [
-                {'Name': 'SubTotalMontoGravado1', 'Value': self._ecf_format_amount(self.amount_untaxed)},
-                {'Name': 'SubTotalITBIS', 'Value': self._ecf_format_amount(tax_data.get('total_itbis', 0.0))},
-            ]
-            if doc_type == '41':
-                net = self.amount_total - tax_data.get('total_isr_retencion', 0.0) - tax_data.get('total_itbis_retenido', 0.0)
-                subtotals_info.append({'Name': 'SubTotalMontoGravadoTotal', 'Value': self._ecf_format_amount(net)})
-            else:
-                subtotals_info.append({'Name': 'SubTotalMontoGravadoTotal', 'Value': self._ecf_format_amount(self.amount_total)})
-            data_blocks.append({'Name': 'SUBTOTALES', 'Info': subtotals_info})
-
-        # Bloque INFORMACION_REFERENCIA: solo para notas de crédito/débito (33, 34)
+        # Bloque InformacionReferencia: solo para notas de crédito/débito (33, 34)
         if doc_type in ('33', '34'):
             ref_invoice = self._ecf_get_ref_invoice()
-            data_blocks.append({
-                'Name': 'INFORMACION_REFERENCIA',
-                'Info': [
-                    {
-                        'Name': 'FechaNCFModificado',
-                        'Value': ref_invoice.invoice_date.strftime('%Y-%m-%d') if ref_invoice and ref_invoice.invoice_date else '',
-                    },
-                    {
-                        'Name': 'NCFModificado',
-                        'Value': (ref_invoice.l10n_do_fiscal_number or ref_invoice.l10n_latam_document_number or '') if ref_invoice else '',
-                    },
-                    {
-                        'Name': 'CodigoModificacion',
-                        'Value': self.l10n_do_ecf_modification_code or '',
-                    },
-                ],
-            })
+            ref_info = [
+                {
+                    'name': 'NCFModificado',
+                    'value': (ref_invoice.l10n_do_fiscal_number or ref_invoice.l10n_latam_document_number or '') if ref_invoice else '',
+                },
+                {
+                    'name': 'FechaNCFModificado',
+                    'value': ref_invoice.invoice_date.strftime('%d-%m-%Y') if ref_invoice and ref_invoice.invoice_date else '',
+                },
+                {
+                    'name': 'CodigoModificacion',
+                    'value': self.l10n_do_ecf_modification_code or '',
+                },
+            ]
+            if self.l10n_do_modification_reason:
+                ref_info.append({'name': 'RazonModificacion', 'value': self.l10n_do_modification_reason})
+            data_blocks.append({'name': 'InformacionReferencia', 'info': ref_info})
+
+        if not data_blocks:
+            return {}
 
         return {
-            'AdditionalInfo': [{
-                'AditionalData': {'Data': data_blocks},
+            'additionalInfo': [{
+                'aditionalData': {'data': data_blocks},
             }],
         }
 
     def _ecf_get_payments(self, doc_type, tax_data):
         self.ensure_one()
+        # La API no emite TablaFormasPago para E34 ni E43
+        if doc_type in ('34', '43'):
+            return []
         if doc_type == '41':
             net = self.amount_total - tax_data.get('total_isr_retencion', 0.0) - tax_data.get('total_itbis_retenido', 0.0)
             amount = self._ecf_format_amount(net)
         else:
-            amount = self._ecf_format_amount(self.amount_untaxed)
-        return [{'Code': self.l10n_do_payment_type or '1', 'Amount': amount}]
+            # MontoPago = monto total con impuestos que paga el comprador
+            amount = self._ecf_format_amount(self.amount_total)
+        return [{'code': self.l10n_do_payment_type or '1', 'amount': amount}]
 
     # =========================================================================
     # CONSTRUCTOR PRINCIPAL
@@ -778,18 +768,43 @@ class AccountMove(models.Model):
 
         return {
             'live': is_live_flag,
-            'Version': '1.0',
-            'CountryCode': 'DO',
-            'IdUser': self.env.user.id,
-            'TaxId': self._ecf_sanitize_tax_id(self.company_id.vat),
-            'Header': self._ecf_get_header(doc_type),
-            'Seller': self._ecf_get_seller(doc_type),
-            'Buyer': self._ecf_get_buyer(doc_type),
-            'Items': self._ecf_get_items(doc_type, tax_data),
-            'Totals': self._ecf_get_totals(doc_type, tax_data),
-            'Payments': self._ecf_get_payments(doc_type, tax_data),
-            'AdditionalDocumentInfo': self._ecf_get_additional_doc_info(doc_type, tax_data),
+            'version': '1.0',
+            'countryCode': 'DO',
+            'idUser': self.env.user.id,
+            'taxID': self._ecf_sanitize_tax_id(self.company_id.vat),
+            'header': self._ecf_get_header(doc_type),
+            'seller': self._ecf_get_seller(doc_type),
+            'buyer': self._ecf_get_buyer(doc_type),
+            'items': self._ecf_get_items(doc_type, tax_data),
+            'totals': self._ecf_get_totals(doc_type, tax_data),
+            'payments': self._ecf_get_payments(doc_type, tax_data),
+            'additionalDocumentInfo': self._ecf_get_additional_doc_info(doc_type, tax_data),
         }
+
+    # =========================================================================
+    # CICLO DE VIDA: CONFIRMACIÓN CON AUTO-ENVÍO ECF
+    # =========================================================================
+
+    def action_post(self):
+        """Override: si ecf_auto_send está activo en la empresa, envía al DGII al confirmar."""
+        res = super().action_post()
+        for move in self.filtered('is_ecf_invoice'):
+            if not move.company_id.ecf_auto_send:
+                continue
+            if not move._ecf_should_send():
+                move.write({
+                    'ecf_validation_status': 'skipped',
+                    'ecf_api_message': 'Tipo deshabilitado en configuración de la empresa.',
+                })
+                continue
+            try:
+                move.action_send_ecf()
+            except Exception as e:
+                move.write({
+                    'ecf_api_message': str(e),
+                    'ecf_validation_status': 'error',
+                })
+        return res
 
     # =========================================================================
     # ACCIÓN WIZARD DE PREVISUALIZACIÓN

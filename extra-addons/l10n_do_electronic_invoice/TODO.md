@@ -251,7 +251,7 @@ El módulo genera el JSON (`_build_ecf_payload()`). Falta enviarlo.
   - [x] **3.0.7** Registrar en `models/__init__.py`, `__manifest__.py` data y
         `security/ir.model.access.csv`
 
-- [ ] **3.1** Sobrescribir `action_post()` en `account.move`:
+- [x] **3.1** Sobrescribir `action_post()` en `account.move`:
   ```python
   def action_post(self):
       res = super().action_post()
