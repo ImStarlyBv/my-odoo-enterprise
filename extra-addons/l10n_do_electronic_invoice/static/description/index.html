@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 14px;
+            color: #333;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* ── HEADER ─────────────────────────────────────────── */
+        .ecf-header {
+            background: linear-gradient(135deg, #1565c0 0%, #283593 100%);
+            color: #fff;
+            padding: 36px 40px 30px;
+        }
+        .ecf-header h1 {
+            margin: 0 0 6px;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+        .ecf-header p {
+            margin: 0;
+            font-size: 14px;
+            opacity: 0.85;
+        }
+        .ecf-badges {
+            margin-top: 14px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255,255,255,0.18);
+            color: #fff;
+        }
+
+        /* ── LAYOUT ─────────────────────────────────────────── */
+        .ecf-body {
+            padding: 32px 40px;
+            max-width: 900px;
+        }
+
+        /* ── SECTIONS ───────────────────────────────────────── */
+        h2 {
+            font-size: 17px;
+            font-weight: 700;
+            color: #1565c0;
+            border-bottom: 2px solid #e3eaf7;
+            padding-bottom: 6px;
+            margin: 32px 0 16px;
+        }
+        h3 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #333;
+            margin: 20px 0 8px;
+        }
+
+        /* ── FEATURE GRID ───────────────────────────────────── */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .feature-card {
+            background: #f5f8ff;
+            border: 1px solid #d8e4f5;
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+        .feature-card .icon {
+            font-size: 20px;
+            margin-bottom: 6px;
+        }
+        .feature-card strong {
+            display: block;
+            font-size: 13px;
+            color: #1565c0;
+            margin-bottom: 3px;
+        }
+        .feature-card p {
+            margin: 0;
+            font-size: 12.5px;
+            color: #555;
+        }
+
+        /* ── TABLES ─────────────────────────────────────────── */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        th {
+            background: #1565c0;
+            color: #fff;
+            text-align: left;
+            padding: 8px 12px;
+            font-weight: 600;
+        }
+        td {
+            padding: 7px 12px;
+            border-bottom: 1px solid #e8edf5;
+            vertical-align: top;
+        }
+        tr:nth-child(even) td {
+            background: #f7f9fd;
+        }
+        td code, th code {
+            background: #e8edf5;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-family: "SF Mono", Consolas, monospace;
+            font-size: 12px;
+        }
+
+        /* ── DOC TYPE BADGES ────────────────────────────────── */
+        .dt {
+            display: inline-block;
+            background: #1565c0;
+            color: #fff;
+            border-radius: 4px;
+            padding: 1px 7px;
+            font-weight: 700;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        /* ── ALERT BOXES ────────────────────────────────────── */
+        .alert {
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin: 10px 0;
+            font-size: 13px;
+        }
+        .alert-warning {
+            background: #fff8e1;
+            border-left: 4px solid #f9a825;
+            color: #5a3e00;
+        }
+        .alert-danger {
+            background: #fdecea;
+            border-left: 4px solid #c62828;
+            color: #5c0505;
+        }
+        .alert-info {
+            background: #e3f2fd;
+            border-left: 4px solid #1565c0;
+            color: #0d2b54;
+        }
+        .alert strong {
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        /* ── CONFIG PATH ────────────────────────────────────── */
+        .config-path {
+            display: inline-block;
+            background: #eef2ff;
+            border: 1px solid #c5cff5;
+            border-radius: 20px;
+            padding: 3px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #3949ab;
+            margin-bottom: 10px;
+        }
+        .config-path span {
+            opacity: 0.6;
+            margin: 0 3px;
+        }
+
+        /* ── FLOW ───────────────────────────────────────────── */
+        .flow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            margin: 14px 0;
+        }
+        .flow-step {
+            background: #1565c0;
+            color: #fff;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 12.5px;
+            font-weight: 600;
+        }
+        .flow-arrow {
+            color: #aaa;
+            font-size: 18px;
+            line-height: 1;
+        }
+        .flow-step.alt { background: #43a047; }
+        .flow-step.err { background: #e53935; }
+        .flow-step.skip { background: #757575; }
+
+        /* ── STATUS TABLE ───────────────────────────────────── */
+        .status-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 11.5px;
+            font-weight: 600;
+        }
+        .s-ok     { background: #e8f5e9; color: #2e7d32; }
+        .s-proc   { background: #fff3e0; color: #e65100; }
+        .s-err    { background: #fdecea; color: #c62828; }
+        .s-skip   { background: #f5f5f5; color: #555; }
+        .s-rfce   { background: #e8eaf6; color: #283593; }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e8edf5;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<div class="ecf-header">
+    <h1>Facturación Electrónica e-CF</h1>
+    <p>Generación, envío y seguimiento de Comprobantes Fiscales Electrónicos ante la DGII · República Dominicana</p>
+    <div class="ecf-badges">
+        <span class="badge">Odoo 18</span>
+        <span class="badge">e-CF E31–E47</span>
+        <span class="badge">api.ecf-software.online</span>
+        <span class="badge">v18.0.1.0.0</span>
+    </div>
+</div>
+
+<div class="ecf-body">
+
+<!-- ════════════════ FUNCIONALIDADES ════════════════ -->
+<h2>¿Qué hace este módulo?</h2>
+<div class="feature-grid">
+    <div class="feature-card">
+        <div class="icon">⚡</div>
+        <strong>Auto-envío al confirmar</strong>
+        <p>Envía el e-CF a la API automáticamente al confirmar la factura, sin pasos manuales.</p>
+    </div>
+    <div class="feature-card">
+        <div class="icon">🔍</div>
+        <strong>Previsualización JSON</strong>
+        <p>Botón "Ver JSON e-CF" en cualquier factura para inspeccionar el payload antes de enviar.</p>
+    </div>
+    <div class="feature-card">
+        <div class="icon">✅</div>
+        <strong>Respuesta persistida</strong>
+        <p>TrackId, código de seguridad, QR (imagen PNG) y estado DGII se guardan en la factura.</p>
+    </div>
+    <div class="feature-card">
+        <div class="icon">🚨</div>
+        <strong>Diagnóstico de errores</strong>
+        <p>Botón "Ver Respuesta API" (rojo) con la respuesta cruda de la API cuando falla el envío.</p>
+    </div>
+    <div class="feature-card">
+        <div class="icon">🔧</div>
+        <strong>Control por tipo</strong>
+        <p>Cada tipo de comprobante (E31–E47) puede habilitarse o deshabilitarse por empresa.</p>
+    </div>
+    <div class="feature-card">
+        <div class="icon">💱</div>
+        <strong>Multidivisa</strong>
+        <p>Tasa DOP calculada automáticamente desde la fecha de emisión o la divisa de la factura.</p>
+    </div>
+</div>
+
+<!-- ════════════════ TIPOS SOPORTADOS ════════════════ -->
+<h2>Tipos de comprobante soportados</h2>
+<table>
+    <tr>
+        <th>Código</th>
+        <th>Tipo</th>
+        <th>Uso</th>
+    </tr>
+    <tr><td><span class="dt">E31</span></td><td>Factura de Crédito Fiscal</td><td>Ventas B2B con RNC del comprador</td></tr>
+    <tr><td><span class="dt">E32</span></td><td>Factura de Consumidor Final</td><td>Ventas B2C (< 250K sin RNC · ≥ 250K exige RNC)</td></tr>
+    <tr><td><span class="dt">E33</span></td><td>Nota de Débito</td><td>Ajuste al alza sobre factura emitida</td></tr>
+    <tr><td><span class="dt">E34</span></td><td>Nota de Crédito</td><td>Devolución o ajuste a la baja</td></tr>
+    <tr><td><span class="dt">E41</span></td><td>Comprobante de Compras</td><td>Registro de compras a proveedores locales</td></tr>
+    <tr><td><span class="dt">E43</span></td><td>Gastos Menores</td><td>Gastos sin comprobante formal</td></tr>
+    <tr><td><span class="dt">E44</span></td><td>Regímenes Especiales</td><td>Empresas bajo régimen especial de tributación</td></tr>
+    <tr><td><span class="dt">E45</span></td><td>Gubernamental</td><td>Ventas a entidades del Estado dominicano</td></tr>
+    <tr><td><span class="dt">E46</span></td><td>Exportaciones</td><td>Ventas al exterior (sin ITBIS)</td></tr>
+    <tr><td><span class="dt">E47</span></td><td>Compras al Exterior</td><td>Servicios o bienes adquiridos fuera del país</td></tr>
+</table>
+
+<!-- ════════════════ CONFIGURACIÓN ════════════════ -->
+<h2>Configuración</h2>
+
+<h3>1 · Credenciales de la API</h3>
+<div class="config-path">Configuración <span>›</span> Empresa <span>›</span> Facturación Electrónica (e-CF)</div>
+
+<table>
+    <tr><th>Campo</th><th>Descripción</th></tr>
+    <tr><td><code>URL de la API</code></td><td>Por defecto <code>https://api.ecf-software.online</code>. Cambiar solo si usas un servidor propio.</td></tr>
+    <tr><td><code>API Key</code></td><td>Bearer token del tenant. Se emite <strong>una sola vez</strong> — guárdalo en un lugar seguro.</td></tr>
+    <tr><td><code>Envío automático</code></td><td>Activa el auto-envío al confirmar facturas e-CF (recomendado).</td></tr>
+</table>
+
+<div class="alert alert-danger">
+    <strong>API Key irrecuperable</strong>
+    Si el API Key se pierde, debes registrar un nuevo tenant o solicitarlo al administrador de la API. No existe endpoint de recuperación.
+</div>
+
+<h3>2 · Datos del emisor</h3>
+<div class="config-path">Configuración <span>›</span> Empresa <span>›</span> Facturación Electrónica (e-CF)</div>
+
+<table>
+    <tr><th>Campo</th><th>Descripción</th></tr>
+    <tr><td><code>RNC</code></td><td>Identificador tributario de la empresa. Requerido y sin guiones.</td></tr>
+    <tr><td><code>Nombre Comercial</code></td><td>Nombre que aparece en el e-CF (puede diferir de la razón social).</td></tr>
+    <tr><td><code>Actividad Económica</code></td><td>Código de actividad registrado ante la DGII.</td></tr>
+    <tr><td><code>Código de Sucursal</code></td><td>Identifica la sucursal emisora. Default: <code>0001</code>.</td></tr>
+    <tr><td><code>Municipio</code></td><td>Municipio DGII de la sede principal (afecta el campo <code>District</code> del emisor).</td></tr>
+    <tr><td><code>Modo Producción</code></td><td><code>Activo</code> → DGII real · <code>Inactivo</code> → ambiente de certificación.</td></tr>
+</table>
+
+<div class="alert alert-warning">
+    <strong>Siempre usa Modo Producción = Inactivo en entornos de prueba</strong>
+    El flag <code>is_live</code> envía <code>"live": "1"</code> al API. Con <code>1</code> los e-CF son reales y válidos ante la DGII.
+</div>
+
+<h3>3 · Tipos de comprobante habilitados</h3>
+<div class="config-path">Configuración <span>›</span> Empresa <span>›</span> Facturación Electrónica (e-CF) <span>›</span> Tipos de Comprobante</div>
+
+<p>La tabla muestra los 10 tipos con un toggle <strong>"Enviar a la DGII"</strong>. Los tipos deshabilitados quedan con estado <code>skipped</code> al confirmar sin bloquear la operación.</p>
+<p>Usa el botón <strong>"Inicializar tipos de comprobante"</strong> en instalaciones nuevas para crear los 10 registros con el toggle activo.</p>
+
+<div class="alert alert-info">
+    <strong>Recomendación para E41 y E47</strong>
+    Estos tipos son para registrar compras o gastos, no ventas. En la mayoría de empresas conviene deshabilitarlos para evitar envíos accidentales.
+</div>
+
+<h3>4 · Impuestos</h3>
+<p>El módulo identifica impuestos por <strong>nombre</strong>. Configura los impuestos así:</p>
+<table>
+    <tr><th>Nombre contiene</th><th><code>amount</code></th><th>Clasificación DGII</th></tr>
+    <tr><td><code>ITBIS</code></td><td>> 0</td><td>ITBIS gravado (18% → ITBIS1 · 16% → ITBIS2 · 9% → ITBIS3 · 8% → ITBIS4)</td></tr>
+    <tr><td><code>ITBIS</code></td><td>< 0</td><td>ITBIS retenido (usado en E41)</td></tr>
+    <tr><td><code>ISR</code>, <code>RENTA</code> o <code>RETENCION</code></td><td>< 0</td><td>ISR retenido (E41)</td></tr>
+    <tr><td>Sin ITBIS positivo en la línea</td><td>—</td><td>Exento</td></tr>
+</table>
+
+<!-- ════════════════ FLUJO DE ENVÍO ════════════════ -->
+<h2>Flujo de envío</h2>
+
+<div class="flow">
+    <div class="flow-step">Borrador</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">Confirmar factura</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">¿Tipo habilitado?</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">Construir JSON</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">POST /generar-comprobante</div>
+</div>
+
+<table>
+    <tr><th>Resultado</th><th>Estado</th><th>Qué pasa</th></tr>
+    <tr>
+        <td>API responde 200</td>
+        <td>
+            <span class="status-badge s-ok">Aceptado (1)</span><br/>
+            <span class="status-badge s-proc">En Proceso (3)</span><br/>
+            <span class="status-badge s-ok">Aceptado Cond. (4)</span><br/>
+            <span class="status-badge s-rfce">RFCE</span>
+        </td>
+        <td>Se guardan: <code>trackId</code>, <code>codigoSeguridad</code>, <code>qrUrl</code>, imagen QR (PNG)</td>
+    </tr>
+    <tr>
+        <td>Error HTTP o timeout</td>
+        <td><span class="status-badge s-err">Error</span></td>
+        <td>Respuesta cruda en <code>ecf_api_message</code>. Botón "Ver Respuesta API" (rojo) aparece en la factura.</td>
+    </tr>
+    <tr>
+        <td>Tipo deshabilitado en config</td>
+        <td><span class="status-badge s-skip">Skipped</span></td>
+        <td>Sin llamada a la API. La factura queda publicada normalmente.</td>
+    </tr>
+</table>
+
+<!-- ════════════════ PAUTAS IMPORTANTES ════════════════ -->
+<h2>Pautas importantes</h2>
+
+<h3>E32 — Consumidor final y la regla de los 250 000 DOP</h3>
+<p>Las facturas E32 con monto <strong>menor a 250 000 DOP</strong> no pasan por la DGII. La API las registra localmente y devuelve un <code>trackId</code> que empieza con <code>"RFCE-"</code>. Esto <strong>no es un error</strong>; el estado se registra como <code>rfce</code>.</p>
+<p>Con monto <strong>≥ 250 000 DOP</strong> el comprador debe tener RNC o Cédula configurados. Si no los tiene, la confirmación se bloquea con un aviso.</p>
+
+<h3>E33 y E34 — Notas de Débito y Crédito</h3>
+<div class="alert alert-warning">
+    <strong>Campos obligatorios antes de confirmar</strong>
+    <ul style="margin:4px 0 0; padding-left:20px;">
+        <li><strong>Código de Modificación</strong> (<code>l10n_do_ecf_modification_code</code>)</li>
+        <li>La factura original debe estar referenciada en el campo "Reversa de" o "Débito de"</li>
+    </ul>
+</div>
+
+<h3>Estado "En Proceso" (código 3)</h3>
+<p>La DGII puede tardar horas en validar un comprobante. Un estado <code>3</code> no es un error: significa que el e-CF fue recibido y está pendiente de procesamiento. Próximamente el módulo incluirá re-consulta automática por cron (Bloque 4).</p>
+
+<h3>Secuencias NCF autorizadas</h3>
+<p>La DGII asigna bloques finitos de números de comprobante por tipo. Cuando se agotan es necesario solicitar una nueva autorización. El módulo incorporará control de secuencias con advertencia y bloqueo automático (Bloque 10 del roadmap).</p>
+
+<h3>Certificado digital</h3>
+<p>La API firma los e-CF con un certificado del tenant. Verifica su vencimiento periódicamente en el panel de <code>api.ecf-software.online</code>. Un certificado vencido impide la emisión de cualquier comprobante.</p>
+
+<!-- ════════════════ CAMPOS ════════════════ -->
+<h2>Campos agregados en la factura</h2>
+<table>
+    <tr><th>Campo</th><th>Dónde verlo</th><th>Descripción</th></tr>
+    <tr><td><code>ecf_track_id</code></td><td>Pestaña "Otra Info"</td><td>ID de rastreo DGII (o <code>RFCE-...</code>)</td></tr>
+    <tr><td><code>ecf_codigo_seguridad</code></td><td>Pestaña "Otra Info"</td><td>Primeros 6 caracteres del SignatureValue</td></tr>
+    <tr><td><code>ecf_fecha_firma</code></td><td>Pestaña "Otra Info"</td><td>Fecha/hora de firma digital (llega via webhook)</td></tr>
+    <tr><td><code>ecf_qr_url</code></td><td>Pestaña "Otra Info"</td><td>URL de verificación en el portal DGII</td></tr>
+    <tr><td><code>ecf_qr_image</code></td><td>Pestaña "Otra Info"</td><td>Imagen PNG del código QR</td></tr>
+    <tr><td><code>ecf_validation_status</code></td><td>Header de la factura (tag)</td><td>Estado actual del e-CF</td></tr>
+    <tr><td><code>ecf_api_message</code></td><td>Wizard "Ver Respuesta API"</td><td>Respuesta cruda de la API (útil en errores)</td></tr>
+</table>
+
+<hr/>
+<p style="text-align:center; color:#999; font-size:12px; margin:20px 0 8px;">
+    Facturación Electrónica e-CF · Odoo 18 · Omar Bautista · OPL-1
+</p>
+
+</div>
+</body>
+</html>

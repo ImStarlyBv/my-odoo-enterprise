@@ -416,15 +416,232 @@ El QR de verificación DGII debe aparecer en el PDF impreso de la factura.
 
 ---
 
+## Bloque 10: Control de secuencias NCF autorizadas por la DGII
+
+La DGII asigna bloques de números de comprobante por tipo (ej: E31 del 1 al 500).
+Cuando se agotan, hay que solicitar una nueva autorización. Sin control en Odoo,
+el módulo seguiría generando NCF fuera del rango autorizado, lo cual es inválido.
+
+### Reglas de negocio
+- Si `sequence_max == 0` → sin configurar, no se aplica ninguna validación (compatible
+  con instalaciones existentes que no hayan configurado el límite).
+- Si `remaining == 0` → bloquear confirmación de factura con `UserError`.
+- Si `0 < remaining <= warning_threshold` → permitir, pero mostrar advertencia visible
+  en el formulario de la factura.
+
+### Cómo calcular `last_used`
+- Buscar en `account.move` el número más alto entre facturas `state='posted'`
+  cuyo `l10n_latam_document_number` empiece con `E{doc_type}`.
+- Extraer la parte numérica: `'E310000000050'[3:]` → `int('0000000050')` → `50`.
+- `remaining = sequence_max - last_used`.
+
+---
+
+- [ ] **10.1** Agregar campos de secuencia en `models/ecf_doc_type_config.py`:
+
+  ```python
+  sequence_max = fields.Integer(
+      string='Último NCF Autorizado (DGII)',
+      default=0,
+      help='Número más alto del bloque autorizado por la DGII. 0 = sin límite configurado.',
+  )
+  warning_threshold = fields.Integer(
+      string='Alerta cuando queden menos de',
+      default=50,
+      help='Muestra advertencia en la factura cuando los comprobantes restantes caen por debajo de este número.',
+  )
+  last_used_sequence = fields.Integer(
+      string='Último NCF usado',
+      compute='_compute_sequence_stats',
+      help='Número más alto emitido en facturas confirmadas de este tipo.',
+  )
+  remaining_sequences = fields.Integer(
+      string='Comprobantes restantes',
+      compute='_compute_sequence_stats',
+  )
+  sequence_status = fields.Selection(
+      selection=[
+          ('unconfigured', 'Sin configurar'),
+          ('ok', 'Disponible'),
+          ('low', 'Pocos disponibles'),
+          ('exhausted', 'Agotado'),
+      ],
+      string='Estado de secuencia',
+      compute='_compute_sequence_stats',
+  )
+  ```
+
+- [ ] **10.2** Implementar `_compute_sequence_stats()` en `ecf_doc_type_config.py`:
+
+  ```python
+  def _compute_sequence_stats(self):
+      """Lee las facturas confirmadas y calcula el estado de la secuencia NCF."""
+      for config in self:
+          if not config.company_id or not config.doc_type or not config.sequence_max:
+              config.last_used_sequence = 0
+              config.remaining_sequences = 0
+              config.sequence_status = 'unconfigured'
+              continue
+
+          prefix = 'E' + config.doc_type
+          # Buscar el máximo número de secuencia entre facturas confirmadas del tipo
+          self.env.cr.execute("""
+              SELECT COALESCE(
+                  MAX(CAST(SUBSTRING(l10n_latam_document_number FROM %s) AS INTEGER)),
+                  0
+              )
+              FROM account_move
+              WHERE company_id = %s
+                AND state = 'posted'
+                AND l10n_latam_document_number SIMILAR TO %s
+          """, (len(prefix) + 1, config.company_id.id, prefix + '[0-9]+'))
+          last_used = self.env.cr.fetchone()[0] or 0
+
+          remaining = config.sequence_max - last_used
+          config.last_used_sequence = last_used
+          config.remaining_sequences = max(remaining, 0)
+
+          if remaining <= 0:
+              config.sequence_status = 'exhausted'
+          elif remaining <= config.warning_threshold:
+              config.sequence_status = 'low'
+          else:
+              config.sequence_status = 'ok'
+  ```
+
+  > No se usa `store=True` — la vista de configuración es de baja frecuencia y siempre
+  > necesita datos frescos del estado real de la base de datos.
+
+- [ ] **10.3** Agregar helper `_ecf_get_sequence_config()` y `_ecf_check_sequence_limit()`
+      en `account_move.py`:
+
+  ```python
+  def _ecf_get_sequence_config(self):
+      """Devuelve el registro de config de secuencia para el tipo de comprobante actual."""
+      self.ensure_one()
+      return self.env['l10n_do.ecf.doc.type.config'].search([
+          ('company_id', '=', self.company_id.id),
+          ('doc_type', '=', self._ecf_get_doc_type()),
+      ], limit=1)
+
+  def _ecf_check_sequence_limit(self):
+      """Verifica que quedan NCF disponibles antes de confirmar.
+
+      Retorna (str | None): mensaje de advertencia, o None si todo está bien.
+      Lanza UserError si la secuencia está agotada.
+      """
+      self.ensure_one()
+      config = self._ecf_get_sequence_config()
+      if not config or not config.sequence_max:
+          return None  # sin límite configurado, no se valida
+
+      status = config.sequence_status
+      if status == 'exhausted':
+          raise UserError(_(
+              'No quedan comprobantes fiscales electrónicos disponibles para %s.\n'
+              'Solicite una nueva autorización a la DGII antes de continuar.'
+          ) % config.doc_type_label)
+
+      if status == 'low':
+          return _(
+              'Advertencia: quedan solo %d comprobante(s) disponibles para %s. '
+              'Solicite una nueva autorización pronto.'
+          ) % (config.remaining_sequences, config.doc_type_label)
+
+      return None
+  ```
+
+  > `doc_type_label` se agrega como campo relacionado o método de selección — ver 10.5.
+
+- [ ] **10.4** Llamar `_ecf_check_sequence_limit()` en `action_post()` (antes del `super()`):
+
+  ```python
+  def action_post(self):
+      for move in self.filtered('is_ecf_invoice'):
+          warning = move._ecf_check_sequence_limit()
+          # Guardar advertencia en el mensaje de seguimiento si aplica
+          if warning:
+              move.message_post(body=warning, message_type='comment')
+      return super().action_post()
+      # ... resto del auto-envío ECF (ya implementado)
+  ```
+
+  > La advertencia se registra en el chatter; no bloquea. El bloqueo solo ocurre
+  > si `sequence_status == 'exhausted'` (UserError levantado antes de llegar al super).
+
+- [ ] **10.5** Agregar campo `ecf_sequence_warning` en `account.move` para mostrar
+      la advertencia en el formulario de la factura **antes de confirmar**:
+
+  ```python
+  ecf_sequence_warning = fields.Char(
+      string='Advertencia de secuencia NCF',
+      compute='_compute_ecf_sequence_warning',
+  )
+
+  @api.depends('l10n_latam_document_type_id', 'company_id')
+  def _compute_ecf_sequence_warning(self):
+      for move in self:
+          if not move.is_ecf_invoice or move.state != 'draft':
+              move.ecf_sequence_warning = False
+              continue
+          config = move._ecf_get_sequence_config()
+          if not config or not config.sequence_max:
+              move.ecf_sequence_warning = False
+              continue
+          if config.sequence_status == 'exhausted':
+              move.ecf_sequence_warning = _(
+                  'AGOTADO: no quedan comprobantes %s. '
+                  'La factura no podrá confirmarse.'
+              ) % config.doc_type
+          elif config.sequence_status == 'low':
+              move.ecf_sequence_warning = _(
+                  'Quedan %d comprobante(s) %s. Solicite nueva autorización pronto.'
+              ) % (config.remaining_sequences, config.doc_type)
+          else:
+              move.ecf_sequence_warning = False
+  ```
+
+- [ ] **10.6** Mostrar advertencia en `account_move_views.xml` (dentro del formulario,
+      debajo del header):
+
+  ```xml
+  <!-- Advertencia de secuencia NCF -->
+  <div class="alert alert-warning mb-0"
+       role="alert"
+       invisible="not ecf_sequence_warning or ecf_sequence_warning == ''">
+      <i class="fa fa-exclamation-triangle me-1"/>
+      <field name="ecf_sequence_warning" readonly="1" class="d-inline"/>
+  </div>
+  <!-- Bloqueo visual cuando está agotado (campo mismo texto, clase danger) -->
+  ```
+
+  > Usar dos `<div>` con `invisible` diferente si se quiere `alert-danger` para agotado
+  > vs `alert-warning` para pocos. Requiere un segundo campo `ecf_sequence_exhausted`
+  > booleano, o un Selection con valores 'low'/'exhausted'.
+
+- [ ] **10.7** Actualizar vista One2many de tipos en `res_company_views.xml`:
+  - Agregar columnas `sequence_max`, `warning_threshold`, `remaining_sequences`
+  - Agregar columna `sequence_status` con widget `statusbar` o campo `badge`
+    (verde = ok, naranja = low, rojo = exhausted)
+
+- [ ] **10.8** Probar:
+  - Configurar E31 con `sequence_max = 5`, `warning_threshold = 3`
+  - Confirmar 3 facturas → verificar que aparece la advertencia en la 4ta y 5ta
+  - Confirmar la 6ta → verificar que lanza `UserError`
+  - Verificar que con `sequence_max = 0` no hay ninguna validación
+
+---
+
 ## Orden de ejecución recomendado
 
 ```
-Bloque 1 → Bloque 2 → Bloque 3 → Bloque 4 → Bloque 5 → Bloque 8 → Bloque 6 (solo E31) → Bloque 7 → Bloque 9
+Bloque 1 → Bloque 2 → Bloque 3 → Bloque 4 → Bloque 5 → Bloque 8 → Bloque 6 (solo E31) → Bloque 7 → Bloque 9 → Bloque 10
 ```
 
 - No arrancar Bloque 6 hasta que Bloque 3 esté funcionando.
 - Bloque 8 (QR en impresión) va antes de las pruebas masivas para que cada prueba
   ya genere el PDF correcto desde el inicio.
+- Bloque 10 es independiente, se puede implementar en paralelo con cualquier otro bloque.
 
 ---
 
