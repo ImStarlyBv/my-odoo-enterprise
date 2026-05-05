@@ -58,6 +58,7 @@ class AccountMove(models.Model):
             ('pending', 'Pendiente'),
             ('success', 'Validado'),
             ('error', 'Error'),
+            ('1', 'Aceptado'),
             ('3', 'En Proceso'),
             ('4', 'Aceptado Condicional'),
             ('rfce', 'RFCE (sin DGII)'),
