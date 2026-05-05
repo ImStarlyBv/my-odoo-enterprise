@@ -1,4 +1,9 @@
+import logging
+
 from odoo import fields, models, api
+
+_logger = logging.getLogger(__name__)
+
 
 class L10nDoMunicipality(models.Model):
     _name = 'l10n_do.municipality'
@@ -34,15 +39,15 @@ class L10nDoMunicipality(models.Model):
 
     @api.model
     def _sync_dgii_codes_and_states(self):
-        """
-        Odoo 15/18: Función de sincronización automática post-instalación.
-        Busca las provincias por texto ignorando tildes y mayúsculas, asigna 
-        el código DGII de 6 dígitos al modelo nativo y relaciona los municipios.
-        Esto evita colisiones con IDs externos modificados por terceros.
+        """Sincroniza provincias y municipios dominicanos con sus códigos DGII.
+        Busca provincias por nombre ignorando tildes/mayúsculas para evitar
+        colisiones con IDs externos de terceros.
         """
         import unicodedata
-        
-        def n(text): 
+
+        _logger.info("ECF municipios: iniciando sincronización de códigos DGII")
+
+        def n(text):
             if not text: return ""
             return unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('utf-8').upper()
 
@@ -65,15 +70,31 @@ class L10nDoMunicipality(models.Model):
         estado_por_prefijo = {}
 
         # 1. Inyectar código DGII a las provincias encontradas
+        provincias_sincronizadas = 0
         for prefix, name in mapeo.items():
             for state in provincias:
                 if name == n(state.name):
                     state.l10n_do_dgii_code = prefix + '0000'
                     estado_por_prefijo[prefix] = state.id
+                    provincias_sincronizadas += 1
                     break
+        _logger.info(
+            "ECF municipios: %d/%d provincias emparejadas con código DGII",
+            provincias_sincronizadas, len(mapeo),
+        )
 
         # 2. Relacionar los municipios con su provincia
+        municipios_vinculados = 0
+        municipios_sin_provincia = []
         for mun in self.search([]):
             prefix = mun.code[:2]
             if prefix in estado_por_prefijo:
                 mun.state_id = estado_por_prefijo[prefix]
+                municipios_vinculados += 1
+            else:
+                municipios_sin_provincia.append(mun.code)
+
+        _logger.info(
+            "ECF municipios: %d vinculados a provincia | %d sin provincia: %s",
+            municipios_vinculados, len(municipios_sin_provincia), municipios_sin_provincia or '[]',
+        )

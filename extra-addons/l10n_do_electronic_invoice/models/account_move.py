@@ -1,13 +1,16 @@
 import base64
 import json
+import logging
 import re
 from datetime import date
 from io import BytesIO
 
 import requests
 
-from odoo import models, fields, api, _
-from odoo.exceptions import UserError
+from odoo import models, fields, api, _, registry as odoo_registry
+from odoo.exceptions import UserError, ValidationError
+
+_logger = logging.getLogger(__name__)
 
 # Mapeo forma de pago del diario → código DGII
 PAYMENT_FORM_TO_DGII_CODE = {
@@ -314,20 +317,27 @@ class AccountMove(models.Model):
         return config.send_to_dgii if config else True
 
     def _ecf_generate_qr_image(self):
-        """Lee ecf_qr_url, genera PNG con qrcode y lo guarda en base64 en ecf_qr_image.
-        Si la librería qrcode no está instalada, omite silenciosamente.
-        """
+        """Lee ecf_qr_url, genera PNG con qrcode y lo guarda en base64 en ecf_qr_image."""
         self.ensure_one()
         if not self.ecf_qr_url:
             return
         try:
             import qrcode
         except ImportError:
+            _logger.warning(
+                "ECF: librería 'qrcode' no instalada — imagen QR no generada para %s. "
+                "Instalar con: pip install qrcode[pil]",
+                self.name,
+            )
             return
-        qr = qrcode.make(self.ecf_qr_url)
-        buf = BytesIO()
-        qr.save(buf, format='PNG')
-        self.ecf_qr_image = base64.b64encode(buf.getvalue())
+        try:
+            qr = qrcode.make(self.ecf_qr_url)
+            buf = BytesIO()
+            qr.save(buf, format='PNG')
+            self.ecf_qr_image = base64.b64encode(buf.getvalue())
+            _logger.debug("ECF: imagen QR generada para %s", self.name)
+        except Exception as e:
+            _logger.warning("ECF: no se pudo generar la imagen QR para %s: %s", self.name, str(e))
 
     # =========================================================================
     # EXTRACCIÓN DE TOTALES DE IMPUESTOS (Odoo 18, sin recalcular)
@@ -786,25 +796,111 @@ class AccountMove(models.Model):
     # =========================================================================
 
     def action_post(self):
-        """Override: si ecf_auto_send está activo en la empresa, envía al DGII al confirmar."""
-        res = super().action_post()
-        for move in self.filtered('is_ecf_invoice'):
-            if not move.company_id.ecf_auto_send:
-                continue
-            if not move._ecf_should_send():
+        """Confirma la factura. Con ecf_auto_send activo, bloquea si el envío DGII falla.
+
+        El error se persiste en ecf_api_message usando un cursor independiente para que
+        sobreviva al rollback de la transacción principal y el wizard "Ver Respuesta API"
+        pueda mostrarlo aunque la confirmación haya sido revertida.
+        """
+        # Clasificar facturas ECF según comportamiento de envío.
+        ecf_auto = self.filtered(
+            lambda m: m.is_ecf_invoice
+                and m.company_id.ecf_auto_send
+                and m._ecf_should_send()
+        )
+        ecf_skipped = self.filtered(
+            lambda m: m.is_ecf_invoice
+                and m.company_id.ecf_auto_send
+                and not m._ecf_should_send()
+        )
+
+        if not ecf_auto:
+            # Sin envío bloqueante: confirmar normalmente y marcar tipos deshabilitados.
+            res = super().action_post()
+            for move in ecf_skipped:
+                _logger.info(
+                    "ECF: tipo E%s deshabilitado — skipped | %s",
+                    move._ecf_get_doc_type(), move.name,
+                )
                 move.write({
                     'ecf_validation_status': 'skipped',
                     'ecf_api_message': 'Tipo deshabilitado en configuración de la empresa.',
                 })
-                continue
-            try:
-                move.action_send_ecf()
-            except Exception as e:
-                move.write({
-                    'ecf_api_message': str(e),
-                    'ecf_validation_status': 'error',
-                })
-        return res
+            return res
+
+        _logger.info(
+            "ECF auto-envío bloqueante: %d factura(s) | empresa: %s",
+            len(ecf_auto), ecf_auto[0].company_id.name,
+        )
+
+        # Savepoint: si el envío falla, la confirmación se revierte.
+        # Los errores de red/API se guardan con cursor separado antes del raise final.
+        send_errors = {}  # {move.id: {'name': str, 'msg': str}}
+
+        try:
+            with self.env.cr.savepoint():
+                res = super().action_post()
+
+                for move in ecf_skipped:
+                    _logger.info(
+                        "ECF: tipo E%s deshabilitado — skipped | %s",
+                        move._ecf_get_doc_type(), move.name,
+                    )
+                    move.write({
+                        'ecf_validation_status': 'skipped',
+                        'ecf_api_message': 'Tipo deshabilitado en configuración de la empresa.',
+                    })
+
+                for move in ecf_auto:
+                    # UserError/ValidationError de datos salen solos y el savepoint revierte.
+                    move.action_send_ecf()
+
+                    if move.ecf_validation_status == 'error':
+                        # Error de red o rechazo de la API, capturado internamente.
+                        send_errors[move.id] = {
+                            'name': move.name,
+                            'msg': move.ecf_api_message or '(sin detalle de la API)',
+                        }
+                        _logger.warning(
+                            "ECF: bloqueando confirmación de %s | error: %s",
+                            move.name, send_errors[move.id]['msg'],
+                        )
+                        raise ValidationError('_ecf_send_failed_')
+
+                return res  # éxito — savepoint liberado
+
+        except Exception:
+            # Savepoint revertido: factura vuelve a borrador.
+            # Invalidar cache del ORM para sincronizar con el estado real de la BD.
+            self.env.invalidate_all()
+
+            if send_errors:
+                # Persistir el error con cursor independiente: este commit ocurre
+                # antes del raise, por lo que sobrevive al rollback de la transacción principal.
+                try:
+                    with odoo_registry(self.env.cr.dbname).cursor() as cr2:
+                        env2 = self.env(cr=cr2)
+                        for move_id, info in send_errors.items():
+                            env2['account.move'].browse(move_id).write({
+                                'ecf_api_message': info['msg'],
+                                'ecf_validation_status': 'error',
+                            })
+                except Exception:
+                    _logger.exception(
+                        "ECF: no se pudo persistir el mensaje de error | facturas: %s",
+                        list(send_errors.keys()),
+                    )
+
+                first = next(iter(send_errors.values()))
+                raise ValidationError(_(
+                    "No se pudo confirmar %(name)s porque el envío a la DGII falló:\n\n"
+                    "%(msg)s\n\n"
+                    "El error fue guardado en la factura. "
+                    "Corrígelo y vuelve a confirmar."
+                ) % first) from None
+
+            # UserError/ValidationError de datos (payload, configuración) — re-lanzar tal cual.
+            raise
 
     # =========================================================================
     # ACCIÓN WIZARD DE PREVISUALIZACIÓN
@@ -813,17 +909,17 @@ class AccountMove(models.Model):
     def action_send_ecf(self):
         """Envía el payload e-CF a api.ecf-software.online y persiste la respuesta."""
         self.ensure_one()
+        doc_type = self._ecf_get_doc_type()
 
-        # Verificar si el tipo está habilitado para envío en la configuración de la empresa
         if not self._ecf_should_send():
+            _logger.info("ECF: tipo E%s deshabilitado — skipped | factura: %s", doc_type, self.name)
             self.write({
                 'ecf_validation_status': 'skipped',
                 'ecf_api_message': 'Tipo de comprobante deshabilitado en la configuración de la empresa.',
             })
             return
 
-        # Validación previa: E32 ≥ 250,000 DOP exige RNC del comprador
-        if self._ecf_get_doc_type() == '32' and self.amount_total >= 250000:
+        if doc_type == '32' and self.amount_total >= 250000:
             if not self.partner_id.vat:
                 raise UserError(_(
                     'E32 con monto ≥ 250,000 DOP requiere que el cliente tenga RNC o Cédula.'
@@ -834,8 +930,27 @@ class AccountMove(models.Model):
         if not api_url or not api_key:
             raise UserError(_('Configure la URL y el API Key ECF en la empresa antes de enviar.'))
 
-        payload = self._build_ecf_payload()
+        # Construir el payload — errores aquí son de datos en Odoo, no de red
+        try:
+            payload = self._build_ecf_payload()
+            _logger.debug(
+                "ECF: payload construido | factura=%s tipo=E%s total=%s",
+                self.name, doc_type, self.amount_total,
+            )
+        except UserError:
+            raise  # UserError ya tiene mensaje amigable para el usuario
+        except Exception as e:
+            _logger.exception("ECF: error inesperado al construir el payload para %s", self.name)
+            raise ValidationError(_(
+                "Error inesperado al generar el JSON e-CF para %(factura)s:\n%(error)s\n\n"
+                "Revisa el log del servidor para el traceback completo."
+            ) % {'factura': self.name, 'error': str(e)}) from e
 
+        # Llamada HTTP a la API
+        _logger.info(
+            "ECF: enviando E%s → %s/api/factura/generar-comprobante | factura: %s",
+            doc_type, api_url, self.name,
+        )
         try:
             response = requests.post(
                 f'{api_url}/api/factura/generar-comprobante',
@@ -844,27 +959,60 @@ class AccountMove(models.Model):
                 timeout=30,
             )
             data = response.json()
+        except requests.exceptions.Timeout:
+            _logger.warning(
+                "ECF: timeout (30s) conectando con la API | factura=%s url=%s",
+                self.name, api_url,
+            )
+            self.write({
+                'ecf_api_message': 'Timeout: la API no respondió en 30 segundos.',
+                'ecf_validation_status': 'error',
+            })
+            return
+        except requests.exceptions.ConnectionError as e:
+            _logger.warning(
+                "ECF: error de conexión con la API | factura=%s error=%s",
+                self.name, str(e),
+            )
+            self.write({
+                'ecf_api_message': 'Error de conexión: %s' % str(e),
+                'ecf_validation_status': 'error',
+            })
+            return
         except Exception as e:
+            _logger.exception("ECF: error inesperado en la llamada HTTP | factura=%s", self.name)
             self.write({
                 'ecf_api_message': str(e),
                 'ecf_validation_status': 'error',
             })
             return
 
+        _logger.info("ECF: respuesta HTTP %s | factura=%s", response.status_code, self.name)
+
         if response.ok:
             qr_url = data.get('qrUrl') or ''
+            estado = data.get('estado') or 'rfce'
+            _logger.info(
+                "ECF: éxito | trackId=%s estado=%s | factura=%s",
+                data.get('trackId'), estado, self.name,
+            )
             self.write({
                 'ecf_track_id': data.get('trackId'),
                 'ecf_qr_url': qr_url,
                 'ecf_codigo_seguridad': data.get('codigoSeguridad'),
                 'ecf_api_message': str(data),
-                'ecf_validation_status': data.get('estado') or 'rfce',
+                'ecf_validation_status': estado,
             })
             if qr_url:
                 self._ecf_generate_qr_image()
         else:
+            error_msg = data.get('error', str(data))
+            _logger.warning(
+                "ECF: rechazado por la API | HTTP %s error=%r | factura=%s",
+                response.status_code, error_msg, self.name,
+            )
             self.write({
-                'ecf_api_message': data.get('error', str(data)),
+                'ecf_api_message': error_msg,
                 'ecf_validation_status': 'error',
             })
 

@@ -1,4 +1,9 @@
+import logging
+
 from odoo import models, fields
+
+_logger = logging.getLogger(__name__)
+
 
 class ResCompany(models.Model):
     _inherit = 'res.company'
@@ -67,8 +72,15 @@ class ResCompany(models.Model):
         for company in self:
             existing = Config.search([('company_id', '=', company.id)]).mapped('doc_type')
             missing = [t for t in doc_types if t not in existing]
-            for doc_type in missing:
-                Config.create({'company_id': company.id, 'doc_type': doc_type, 'send_to_dgii': True})
+            if missing:
+                for doc_type in missing:
+                    Config.create({'company_id': company.id, 'doc_type': doc_type, 'send_to_dgii': True})
+                _logger.info(
+                    "ECF: inicializados %d tipos de comprobante para '%s': %s",
+                    len(missing), company.name, missing,
+                )
+            else:
+                _logger.debug("ECF: tipos de comprobante ya inicializados para '%s'", company.name)
 
     # Conexión con api.ecf-software.online
     ecf_api_url = fields.Char(
