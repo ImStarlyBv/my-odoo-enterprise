@@ -118,6 +118,10 @@ class AccountMove(models.Model):
         string='Mostrar Tasa de Cambio',
         compute='_compute_show_exchange_rate',
     )
+    l10n_do_enable_resend_button = fields.Boolean(
+        related='company_id.l10n_do_enable_resend_button',
+        string='Reenvío DGII habilitado',
+    )
 
     # =========================================================================
     # DATOS ADICIONALES PARA EL PAYLOAD
@@ -152,9 +156,37 @@ class AccountMove(models.Model):
         default='0',
     )
 
+    # Advertencia de secuencia NCF — visible en el formulario antes de confirmar
+    ecf_sequence_warning = fields.Char(
+        string='Advertencia de secuencia NCF',
+        compute='_compute_ecf_sequence_warning',
+    )
+
     # =========================================================================
     # CAMPOS COMPUTADOS
     # =========================================================================
+
+    @api.depends('l10n_latam_document_type_id', 'company_id', 'state')
+    def _compute_ecf_sequence_warning(self):
+        for move in self:
+            if not move.is_ecf_invoice or move.state != 'draft':
+                move.ecf_sequence_warning = False
+                continue
+            doc_type = move.l10n_latam_document_type_id
+            if not doc_type or not doc_type.ecf_sequence_max:
+                move.ecf_sequence_warning = False
+                continue
+            status = doc_type.ecf_sequence_status
+            if status == 'exhausted':
+                move.ecf_sequence_warning = _(
+                    'AGOTADO: no quedan comprobantes %s. La factura no podrá confirmarse.'
+                ) % (doc_type.name or doc_type.doc_code_prefix)
+            elif status == 'low':
+                move.ecf_sequence_warning = _(
+                    'Quedan %d comprobante(s) %s. Solicite nueva autorización pronto.'
+                ) % (doc_type.ecf_remaining_sequences, doc_type.name or doc_type.doc_code_prefix)
+            else:
+                move.ecf_sequence_warning = False
 
     @api.depends('currency_id', 'company_id')
     def _compute_show_exchange_rate(self):
@@ -201,6 +233,91 @@ class AccountMove(models.Model):
                     move.company_id,
                     rate_date,
                 )
+
+    # =========================================================================
+    # SINCRONIZACIÓN DE TASA CUSTOM → ASIENTOS CONTABLES
+    # =========================================================================
+
+    def _check_and_update_currency_rate(self):
+        """Valida que l10n_do_currency_rate no se desvíe más del 10 % de la tasa del sistema.
+        Solo registra en log; no bloquea la confirmación.
+        """
+        self.ensure_one()
+        if self.currency_id == self.company_id.currency_id:
+            return
+        if not self.l10n_do_currency_rate or self.l10n_do_currency_rate == 1.0:
+            return
+
+        system_rate = self.env['res.currency']._get_conversion_rate(
+            self.currency_id,
+            self.company_id.currency_id,
+            self.company_id,
+            self.invoice_date or fields.Date.today(),
+        )
+        if not system_rate or abs(system_rate - 1.0) < 0.0001:
+            return
+
+        deviation = abs(self.l10n_do_currency_rate - system_rate) / system_rate
+        _logger.info(
+            "[%s] Tasa sistema: %.4f | Tasa manual: %.4f | Desviación: %.2f%%",
+            self.name or 'borrador', system_rate, self.l10n_do_currency_rate, deviation * 100,
+        )
+        if deviation > 0.10:
+            _logger.warning(
+                "[%s] La tasa manual (%.4f) difiere %.2f%% de la tasa del sistema (%.4f). "
+                "Verifique el valor ingresado.",
+                self.name or 'borrador', self.l10n_do_currency_rate, deviation * 100, system_rate,
+            )
+
+    def _sync_move_lines_with_l10n_do_rate(self):
+        """Reescribe debit/credit de cada línea del asiento usando l10n_do_currency_rate.
+
+        Se llama en borrador, justo antes de super().action_post(), para que Odoo
+        publique los asientos con la tasa correcta sin modificar res.currency.rate.
+        Solo actúa cuando la moneda de la factura difiere de la moneda de la compañía
+        y se ha registrado una tasa custom distinta de 1.0.
+        """
+        self.ensure_one()
+        if self.currency_id == self.company_id.currency_id:
+            return
+        rate = self.l10n_do_currency_rate
+        if not rate or rate == 1.0:
+            return
+
+        company_currency = self.company_id.currency_id
+        lines = self.line_ids.filtered(
+            lambda l: l.currency_id == self.currency_id and l.amount_currency
+        )
+        for line in lines:
+            new_balance = company_currency.round(line.amount_currency * rate)
+            line.with_context(check_move_validity=False).write({
+                'debit':  new_balance if new_balance > 0.0 else 0.0,
+                'credit': -new_balance if new_balance < 0.0 else 0.0,
+            })
+
+        _logger.info(
+            "[%s] Líneas sincronizadas con tasa l10n_do=%.4f (%d líneas afectadas)",
+            self.name or 'borrador', rate, len(lines),
+        )
+
+    def _reverse_moves(self, default_values_list=None, cancel=False):
+        """Hereda la tasa de la factura original en notas de crédito/débito.
+
+        Si la factura original se emitió con una tasa custom (p. ej. 58.50 DOP/USD)
+        y hoy la tasa del sistema es distinta, la NC debe usar la misma tasa para
+        que los montos en DOP sean proporcionales y pasen la validación de la DGII.
+        """
+        new_moves = super()._reverse_moves(default_values_list, cancel)
+        for move in new_moves:
+            if move.reversed_entry_id and move.reversed_entry_id.l10n_do_currency_rate:
+                move.l10n_do_currency_rate = move.reversed_entry_id.l10n_do_currency_rate
+                _logger.info(
+                    "Tasa heredada en %s: %.4f (desde %s)",
+                    move.name or 'NC borrador',
+                    move.l10n_do_currency_rate,
+                    move.reversed_entry_id.name,
+                )
+        return new_moves
 
     # =========================================================================
     # OVERRIDE DE CONSTRAINT DE SECUENCIA
@@ -284,10 +401,23 @@ class AccountMove(models.Model):
         return '{:.2f}'.format(abs(float(amount or 0.0)))
 
     def _ecf_get_price_unit_without_tax(self, line):
-        """Precio unitario neto. Odoo ya calculó price_subtotal sin importar price_include."""
-        if line.quantity:
-            return float(line.price_subtotal) / float(line.quantity)
-        return float(line.price_unit or 0.0)
+        """Precio unitario neto en DOP. Para impuestos price_include extrae la base via compute_all."""
+        has_price_include = any(tax.price_include for tax in line.tax_ids)
+        if not has_price_include:
+            if line.quantity:
+                return self._convert_to_dop(float(line.price_subtotal) / float(line.quantity))
+            return self._convert_to_dop(float(line.price_unit or 0.0))
+        price_unit = float(line.price_unit or 0.0)
+        taxes_res = line.tax_ids._origin.compute_all(
+            price_unit,
+            currency=line.currency_id or self.currency_id,
+            quantity=1.0,
+            product=line.product_id,
+            partner=self.partner_id,
+            is_refund=self.move_type in ('out_refund', 'in_refund'),
+            handle_price_include=True,
+        )
+        return self._convert_to_dop(float(taxes_res.get('total_excluded', price_unit)))
 
     def _convert_to_dop(self, amount):
         """Convierte un monto a DOP usando la tasa almacenada (Decimal para precisión)."""
@@ -316,6 +446,39 @@ class AccountMove(models.Model):
             ('doc_type', '=', self._ecf_get_doc_type()),
         ], limit=1)
         return config.send_to_dgii if config else True
+
+    def _ecf_get_sequence_config(self):
+        """Devuelve el tipo de documento latam de esta factura (contiene los límites de secuencia)."""
+        self.ensure_one()
+        return self.l10n_latam_document_type_id
+
+    def _ecf_check_sequence_limit(self):
+        """Verifica que quedan NCF disponibles antes de confirmar.
+
+        Retorna str|None: mensaje de advertencia, o None si todo está bien.
+        Lanza UserError si la secuencia está agotada.
+        """
+        self.ensure_one()
+        doc_type = self.l10n_latam_document_type_id
+        if not doc_type or not doc_type.ecf_sequence_max:
+            return None
+
+        status = doc_type.ecf_sequence_status
+        doc_label = doc_type.name or doc_type.doc_code_prefix or ''
+
+        if status == 'exhausted':
+            raise UserError(_(
+                'No quedan comprobantes fiscales electrónicos disponibles para %s.\n'
+                'Solicite una nueva autorización a la DGII antes de continuar.'
+            ) % doc_label)
+
+        if status == 'low':
+            return _(
+                'Advertencia: quedan solo %d comprobante(s) disponibles para %s. '
+                'Solicite una nueva autorización pronto.'
+            ) % (doc_type.ecf_remaining_sequences, doc_label)
+
+        return None
 
     def _ecf_generate_qr_image(self):
         """Lee ecf_qr_url, genera PNG con qrcode y lo guarda en base64 en ecf_qr_image."""
@@ -373,7 +536,7 @@ class AccountMove(models.Model):
 
         for tl in tax_lines:
             tax = tl.tax_line_id
-            amount = abs(float(tl.amount_currency or 0.0))
+            amount = self._convert_to_dop(abs(float(tl.amount_currency or 0.0)))
             rate = abs(float(tax.amount or 0.0))
             is_ret = _is_retention_tax(tax)
 
@@ -399,10 +562,10 @@ class AccountMove(models.Model):
                 if _is_itbis_tax(tax) and not _is_retention_tax(tax):
                     code = ITBIS_CODE_MAP.get(round(abs(float(tax.amount or 0.0)), 1), 'ITBIS1')
                     if code in itbis_groups:
-                        itbis_groups[code]['TaxableAmount'] += abs(float(line.price_subtotal or 0.0))
+                        itbis_groups[code]['TaxableAmount'] += self._convert_to_dop(abs(float(line.price_subtotal or 0.0)))
                     codes_on_line.add(code)
             if not codes_on_line:
-                total_exempt += abs(float(line.price_subtotal or 0.0))
+                total_exempt += self._convert_to_dop(abs(float(line.price_subtotal or 0.0)))
 
         # Construir lista formateada (camelCase según spec de la API)
         total_tax_list = []
@@ -435,7 +598,7 @@ class AccountMove(models.Model):
         for line in product_lines:
             isr_ret = 0.0
             itbis_ret = 0.0
-            base = abs(float(line.price_subtotal or 0.0))
+            base = self._convert_to_dop(abs(float(line.price_subtotal or 0.0)))
             for tax in line.tax_ids:
                 if not _is_retention_tax(tax):
                     continue
@@ -635,7 +798,9 @@ class AccountMove(models.Model):
             if doc_type not in ('43', '47'):
                 discount_rate = float(line.discount or 0.0)
                 if discount_rate > 0:
-                    discount_amount = float(line.price_unit or 0.0) * (discount_rate / 100.0) * float(line.quantity or 0.0)
+                    discount_amount = self._convert_to_dop(
+                        float(line.price_unit or 0.0) * (discount_rate / 100.0) * float(line.quantity or 0.0)
+                    )
                     item['discounts'] = {
                         'discount': [{'code': '%', 'amount': self._ecf_format_amount(discount_amount), 'rate': self._ecf_format_amount(discount_rate)}],
                     }
@@ -645,7 +810,7 @@ class AccountMove(models.Model):
                     }
                 item['charges'] = {'charge': [{'code': '$', 'amount': '0.00'}]}
 
-            item['totals'] = {'totalItem': self._ecf_format_amount(line.price_subtotal)}
+            item['totals'] = {'totalItem': self._ecf_format_amount(self._convert_to_dop(line.price_subtotal))}
 
             retention = tax_data.get('line_retentions', {}).get(line.id, {})
             additional_info = [
@@ -678,17 +843,17 @@ class AccountMove(models.Model):
 
         totals = {
             'qtyItems': len(product_lines),
-            'totalTaxableAmount': self._ecf_format_amount(self.amount_untaxed),
+            'totalTaxableAmount': self._ecf_format_amount(self._convert_to_dop(self.amount_untaxed)),
         }
 
         if doc_type == '47':
             totals['totalTaxes'] = {
-                'totalTax': [{'code': 'EXENTO', 'amount': self._ecf_format_amount(self.amount_total)}],
+                'totalTax': [{'code': 'EXENTO', 'amount': self._ecf_format_amount(self._convert_to_dop(self.amount_total))}],
             }
         else:
             totals['totalTaxes'] = {'totalTax': tax_data.get('total_taxes', [])}
 
-        totals['grandTotal'] = {'invoiceTotal': self._ecf_format_amount(self.amount_total)}
+        totals['grandTotal'] = {'invoiceTotal': self._ecf_format_amount(self._convert_to_dop(self.amount_total))}
 
         # E41 requiere TotalITBISRetenido y TotalISRRetencion (XSD obliga, no tienen default)
         if doc_type in ('41', '47'):
@@ -749,11 +914,12 @@ class AccountMove(models.Model):
         if doc_type in ('34', '43'):
             return []
         if doc_type == '41':
-            net = self.amount_total - tax_data.get('total_isr_retencion', 0.0) - tax_data.get('total_itbis_retenido', 0.0)
+            amount_total_dop = self._convert_to_dop(self.amount_total)
+            net = amount_total_dop - tax_data.get('total_isr_retencion', 0.0) - tax_data.get('total_itbis_retenido', 0.0)
             amount = self._ecf_format_amount(net)
         else:
             # MontoPago = monto total con impuestos que paga el comprador
-            amount = self._ecf_format_amount(self.amount_total)
+            amount = self._ecf_format_amount(self._convert_to_dop(self.amount_total))
         return [{'code': self.l10n_do_payment_type or '1', 'amount': amount}]
 
     # =========================================================================
@@ -803,6 +969,24 @@ class AccountMove(models.Model):
         sobreviva al rollback de la transacción principal y el wizard "Ver Respuesta API"
         pueda mostrarlo aunque la confirmación haya sido revertida.
         """
+        # Sincronizar tasa custom → debit/credit antes de que Odoo publique los asientos.
+        # Aplica a cualquier factura con moneda extranjera y tasa custom distinta de 1.0,
+        # independientemente de si es ECF o no.
+        for move in self:
+            if (move.currency_id
+                    and move.company_id.currency_id
+                    and move.currency_id != move.company_id.currency_id
+                    and move.l10n_do_currency_rate
+                    and move.l10n_do_currency_rate != 1.0):
+                move._check_and_update_currency_rate()
+                move._sync_move_lines_with_l10n_do_rate()
+
+        # Verificar secuencia NCF antes de confirmar (bloquea si está agotada, advierte si queda poco).
+        for move in self.filtered('is_ecf_invoice'):
+            warning = move._ecf_check_sequence_limit()
+            if warning:
+                move.message_post(body=warning, message_type='comment')
+
         # Clasificar facturas ECF según comportamiento de envío.
         ecf_auto = self.filtered(
             lambda m: m.is_ecf_invoice
@@ -1016,6 +1200,21 @@ class AccountMove(models.Model):
                 'ecf_api_message': error_msg,
                 'ecf_validation_status': 'error',
             })
+
+    def action_resend_dgii(self):
+        """Reenvía la factura publicada a la DGII sin necesidad de cancelar ni re-confirmar."""
+        self.ensure_one()
+        if self.state != 'posted':
+            raise ValidationError(_('Solo se pueden reenviar facturas publicadas.'))
+        if not self.is_ecf_invoice:
+            raise ValidationError(_('Solo aplica para facturas electrónicas (e-CF).'))
+        if not self.company_id.l10n_do_enable_resend_button:
+            raise ValidationError(_('El reenvío manual no está habilitado para esta empresa.'))
+        _logger.info(
+            "ECF: reenvío manual iniciado | factura=%s estado_previo=%s",
+            self.name, self.ecf_validation_status,
+        )
+        self.action_send_ecf()
 
     def action_view_ecf_error(self):
         """Abre un wizard con la última respuesta cruda de la API. Solo visible en estado error."""

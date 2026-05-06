@@ -1,0 +1,31 @@
+<odoo>
+    <record id="view_document_type_form_ecf_inherited" model="ir.ui.view">
+        <field name="name">l10n_latam.document.type.form.ecf</field>
+        <field name="model">l10n_latam.document.type</field>
+        <field name="inherit_id" ref="l10n_latam_invoice_document.view_document_type_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Habilitar edición del formulario para poder guardar los campos ECF -->
+            <xpath expr="//form" position="attributes">
+                <attribute name="edit">1</attribute>
+            </xpath>
+
+            <!-- Sección de control de secuencia NCF al pie del formulario -->
+            <xpath expr="//group" position="after">
+                <group string="Secuencia NCF (e-CF)"
+                       invisible="doc_code_prefix == False or doc_code_prefix == '' or doc_code_prefix[0:1] != 'E'">
+                    <group>
+                        <field name="ecf_sequence_max"/>
+                        <field name="ecf_warning_threshold"/>
+                    </group>
+                    <group>
+                        <field name="ecf_last_used_sequence" readonly="1"/>
+                        <field name="ecf_remaining_sequences" readonly="1"/>
+                        <field name="ecf_sequence_status" readonly="1"/>
+                    </group>
+                </group>
+            </xpath>
+
+        </field>
+    </record>
+</odoo>

@@ -10,6 +10,7 @@
                         <group string="Configuración de Envío">
                             <field name="is_live" widget="boolean_toggle"/>
                             <field name="ecf_auto_send" widget="boolean_toggle"/>
+                            <field name="l10n_do_enable_resend_button" widget="boolean_toggle"/>
                             <field name="l10n_do_default_client"/>
                             <field name="ecf_api_url"/>
                             <field name="ecf_api_key" password="True"/>

@@ -13,6 +13,7 @@
         'wizard/ecf_preview_wizard_views.xml',
         'wizard/ecf_error_wizard_views.xml',
         'views/ecf_doc_type_config_views.xml',
+        'views/l10n_latam_document_type_views.xml',
         'views/res_company_views.xml',
         'views/account_move_views.xml',
         'views/res_partner_views.xml',
@@ -21,4 +22,6 @@
     'installable': True,
     'application': False,
     'auto_install': False,
+    'post_init_hook': 'post_init_hook',
+    'post_migrate_hook': 'post_migrate_hook',
 }
