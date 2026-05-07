@@ -32,13 +32,13 @@
             <xpath expr="//field[@name='currency_id']" position="before">
                 <div class="alert alert-warning mb-0 ms-1"
                      role="alert"
-                     invisible="not ecf_sequence_warning or ecf_sequence_warning == '' or ecf_sequence_warning[0:6] == 'AGOTAD'">
+                     invisible="not ecf_sequence_warning or ecf_is_exhausted">
                     <i class="fa fa-exclamation-triangle me-1"/>
                     <field name="ecf_sequence_warning" readonly="1" class="d-inline"/>
                 </div>
                 <div class="alert alert-danger mb-0 ms-1"
                      role="alert"
-                     invisible="not ecf_sequence_warning or ecf_sequence_warning == '' or ecf_sequence_warning[0:6] != 'AGOTAD'">
+                     invisible="not ecf_sequence_warning or not ecf_is_exhausted">
                     <i class="fa fa-ban me-1"/>
                     <field name="ecf_sequence_warning" readonly="1" class="d-inline"/>
                 </div>
@@ -71,6 +71,11 @@
                        invisible="not is_ecf_invoice or not ecf_qr_image">
                     <field name="ecf_qr_image" widget="image" readonly="1" nolabel="1"
                            options="{'size': [120, 120]}"/>
+                </group>
+                <group string="Respuesta API DGII"
+                       invisible="not is_ecf_invoice or not ecf_api_message">
+                    <field name="ecf_api_message" readonly="1" nolabel="1"
+                           widget="text" style="font-family: monospace; font-size: 12px;"/>
                 </group>
             </xpath>
 

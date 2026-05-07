@@ -13,7 +13,7 @@
             <!-- Sección de control de secuencia NCF al pie del formulario -->
             <xpath expr="//group" position="after">
                 <group string="Secuencia NCF (e-CF)"
-                       invisible="doc_code_prefix == False or doc_code_prefix == '' or doc_code_prefix[0:1] != 'E'">
+                       invisible="not doc_code_prefix or doc_code_prefix != 'E'">
                     <group>
                         <field name="ecf_sequence_max"/>
                         <field name="ecf_warning_threshold"/>

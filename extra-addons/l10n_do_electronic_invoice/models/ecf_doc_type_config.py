@@ -1,4 +1,4 @@
-from odoo import models, fields
+from odoo import models, fields, api
 
 
 class L10nDoEcfDocTypeConfig(models.Model):
@@ -8,6 +8,9 @@ class L10nDoEcfDocTypeConfig(models.Model):
     _name = 'l10n_do.ecf.doc.type.config'
     _description = 'Configuración de envío por tipo de comprobante e-CF'
     _order = 'doc_type'
+
+    # Tipos e-CF de compra donde allow_manual_ncf es configurable.
+    _ECF_PURCHASE_CONFIGURABLE = frozenset({'31', '41', '43', '47'})
 
     company_id = fields.Many2one('res.company', required=True, ondelete='cascade')
     doc_type = fields.Selection(
@@ -28,6 +31,22 @@ class L10nDoEcfDocTypeConfig(models.Model):
     )
     send_to_dgii = fields.Boolean(string='Enviar a la DGII', default=True)
 
+    allow_manual_ncf = fields.Boolean(
+        string='NCF Manual',
+        default=True,
+        help=(
+            'Solo aplica a E31 (proveedor), E41, E43 y E47.\n'
+            'Activo: el usuario ingresa el número del comprobante del proveedor.\n'
+            'Inactivo: el sistema genera el número automáticamente.'
+        ),
+    )
+
+    is_ecf_purchase_type = fields.Boolean(
+        string='Es e-CF de compra configurable',
+        compute='_compute_is_ecf_purchase_type',
+        store=True,
+    )
+
     _sql_constraints = [
         (
             'uniq_company_doc_type',
@@ -35,3 +54,9 @@ class L10nDoEcfDocTypeConfig(models.Model):
             'Ya existe una configuración para este tipo de comprobante en esta empresa.',
         )
     ]
+
+    @api.depends('doc_type')
+    def _compute_is_ecf_purchase_type(self):
+        """True para E31, E41, E43, E47; False para el resto."""
+        for rec in self:
+            rec.is_ecf_purchase_type = rec.doc_type in self._ECF_PURCHASE_CONFIGURABLE

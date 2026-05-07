@@ -74,7 +74,7 @@ class ResCompany(models.Model):
             missing = [t for t in doc_types if t not in existing]
             if missing:
                 for doc_type in missing:
-                    Config.create({'company_id': company.id, 'doc_type': doc_type, 'send_to_dgii': True})
+                    Config.create({'company_id': company.id, 'doc_type': doc_type, 'send_to_dgii': True, 'allow_manual_ncf': True})
                 _logger.info(
                     "ECF: inicializados %d tipos de comprobante para '%s': %s",
                     len(missing), company.name, missing,

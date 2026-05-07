@@ -161,6 +161,9 @@ class AccountMove(models.Model):
         string='Advertencia de secuencia NCF',
         compute='_compute_ecf_sequence_warning',
     )
+    ecf_is_exhausted = fields.Boolean(
+        compute='_compute_ecf_sequence_warning',
+    )
 
     # =========================================================================
     # CAMPOS COMPUTADOS
@@ -171,22 +174,27 @@ class AccountMove(models.Model):
         for move in self:
             if not move.is_ecf_invoice or move.state != 'draft':
                 move.ecf_sequence_warning = False
+                move.ecf_is_exhausted = False
                 continue
             doc_type = move.l10n_latam_document_type_id
             if not doc_type or not doc_type.ecf_sequence_max:
                 move.ecf_sequence_warning = False
+                move.ecf_is_exhausted = False
                 continue
             status = doc_type.ecf_sequence_status
             if status == 'exhausted':
                 move.ecf_sequence_warning = _(
                     'AGOTADO: no quedan comprobantes %s. La factura no podrá confirmarse.'
                 ) % (doc_type.name or doc_type.doc_code_prefix)
+                move.ecf_is_exhausted = True
             elif status == 'low':
                 move.ecf_sequence_warning = _(
                     'Quedan %d comprobante(s) %s. Solicite nueva autorización pronto.'
                 ) % (doc_type.ecf_remaining_sequences, doc_type.name or doc_type.doc_code_prefix)
+                move.ecf_is_exhausted = False
             else:
                 move.ecf_sequence_warning = False
+                move.ecf_is_exhausted = False
 
     @api.depends('currency_id', 'company_id')
     def _compute_show_exchange_rate(self):
@@ -386,12 +394,25 @@ class AccountMove(models.Model):
         return '2' if product.type == 'service' else '1'
 
     def _ecf_get_indicador_facturacion(self, doc_type, line):
-        """IndicadorFacturacion por línea según DGII."""
+        """IndicadorFacturacion por línea según DGII.
+
+        Valores:
+        1 = Gravado a tasa estándar
+        2 = Proporcional (E43, E47)
+        3 = ITBIS tasa cero (E46 exportaciones)
+        4 = Exento (E44 regímenes especiales, servicios sin ITBIS)
+        """
         product = line.product_id
         if product and hasattr(product, 'l10n_do_billing_indicator') and product.l10n_do_billing_indicator:
             return product.l10n_do_billing_indicator
-        if doc_type in ('43', '44', '47'):
+        if doc_type in ('43', '47'):
             return '2'
+        if doc_type == '44':
+            # Regímenes especiales: siempre exento
+            return '4'
+        if doc_type == '46':
+            # Exportaciones: siempre ITBIS tasa cero
+            return '3'
         has_itbis = any(_is_itbis_tax(t) and not _is_retention_tax(t) for t in line.tax_ids)
         if has_itbis:
             return '1'
@@ -429,7 +450,7 @@ class AccountMove(models.Model):
     def _ecf_get_ncf_expiry_date(self):
         self.ensure_one()
         if self.l10n_do_ncf_expiration_date:
-            return self.l10n_do_ncf_expiration_date.strftime('%Y-%m-%d')
+            return self.l10n_do_ncf_expiration_date.strftime('%d-%m-%Y')
         return ''
 
     def _ecf_get_ref_invoice(self):
@@ -446,6 +467,37 @@ class AccountMove(models.Model):
             ('doc_type', '=', self._ecf_get_doc_type()),
         ], limit=1)
         return config.send_to_dgii if config else True
+
+    def _l10n_do_get_ecf_purchase_config(self):
+        """Retorna el config de allow_manual_ncf para e-CF de compra (E31/E41/E43/E47).
+
+        Retorna recordset vacío si el move no es e-CF de compra o si el tipo
+        no está en el conjunto configurable.
+
+        :return: l10n_do.ecf.doc.type.config (0 o 1 registro)
+        """
+        self.ensure_one()
+        if not self.is_ecf_invoice or self.move_type not in ('in_invoice', 'in_refund'):
+            return self.env['l10n_do.ecf.doc.type.config']
+        ecf_code = self._ecf_get_doc_type()
+        if ecf_code not in ('31', '41', '43', '47'):
+            return self.env['l10n_do.ecf.doc.type.config']
+        return self.env['l10n_do.ecf.doc.type.config'].search([
+            ('company_id', '=', self.company_id.id),
+            ('doc_type', '=', ecf_code),
+        ], limit=1)
+
+    def _is_l10n_do_manual_document_number(self):
+        """Override: para e-CF de compra (E31/E41/E43/E47), consulta allow_manual_ncf.
+
+        Para todos los demás tipos (incluyendo todos los B), delega a super() sin cambios.
+
+        :return: bool — True si el número debe ingresarse manualmente
+        """
+        config = self._l10n_do_get_ecf_purchase_config()
+        if config:
+            return config.allow_manual_ncf
+        return super()._is_l10n_do_manual_document_number()
 
     def _ecf_get_sequence_config(self):
         """Devuelve el tipo de documento latam de esta factura (contiene los límites de secuencia)."""
@@ -633,8 +685,8 @@ class AccountMove(models.Model):
             {'name': 'Secuencia', 'value': self._ecf_get_sequence()},
         ]
 
-        # FechaVencimientoSecuencia: excluir para 32 y 34
-        if doc_type not in ('32', '34'):
+        # FechaVencimientoSecuencia: excluir solo para E32 (E34 sí la necesita)
+        if doc_type != '32':
             ncf_expiry = self._ecf_get_ncf_expiry_date()
             if ncf_expiry:
                 additional_info.append({'name': 'FechaVencimientoSecuencia', 'value': ncf_expiry})
@@ -671,13 +723,13 @@ class AccountMove(models.Model):
 
         # FechaDesde / FechaHasta: excluir para 43
         if doc_type != '43':
-            additional_info.append({'name': 'FechaDesde', 'value': inv_date.strftime('%Y-%m-%d')})
+            additional_info.append({'name': 'FechaDesde', 'value': inv_date.strftime('%d-%m-%Y')})
             end_date = self.invoice_date_due or inv_date
-            additional_info.append({'name': 'FechaHasta', 'value': end_date.strftime('%Y-%m-%d')})
+            additional_info.append({'name': 'FechaHasta', 'value': end_date.strftime('%d-%m-%Y')})
 
         return {
             'docType': doc_type,
-            'issuedDateTime': inv_date.strftime('%Y-%m-%dT00:00:00'),
+            'issuedDateTime': inv_date.strftime('%d-%m-%Y'),
             'additionalIssueDocInfo': additional_info,
         }
 
@@ -782,7 +834,6 @@ class AccountMove(models.Model):
             price_unit = self._ecf_get_price_unit_without_tax(line)
 
             item = {
-                'codes': self._ecf_get_item_codes(product),
                 'type': self._ecf_get_item_type(line, doc_type),
                 'description': (line.name or (product.name if product else 'SIN_DESCRIPCION'))[:80],
                 'qty': self._ecf_format_amount(line.quantity),
@@ -794,7 +845,7 @@ class AccountMove(models.Model):
                 'price': self._ecf_format_amount(price_unit),
             }
 
-            # Discounts y Charges: excluir para 43 y 47
+            # Descuentos: solo cuando hay descuento real; no incluir bloque vacío
             if doc_type not in ('43', '47'):
                 discount_rate = float(line.discount or 0.0)
                 if discount_rate > 0:
@@ -804,11 +855,6 @@ class AccountMove(models.Model):
                     item['discounts'] = {
                         'discount': [{'code': '%', 'amount': self._ecf_format_amount(discount_amount), 'rate': self._ecf_format_amount(discount_rate)}],
                     }
-                else:
-                    item['discounts'] = {
-                        'discount': [{'code': '$', 'amount': '0.00', 'rate': '0.00'}],
-                    }
-                item['charges'] = {'charge': [{'code': '$', 'amount': '0.00'}]}
 
             item['totals'] = {'totalItem': self._ecf_format_amount(self._convert_to_dop(line.price_subtotal))}
 
@@ -816,6 +862,7 @@ class AccountMove(models.Model):
             additional_info = [
                 {'name': 'DescripcionItem', 'value': product.name if product else ''},
                 {'name': 'IndicadorFacturacion', 'value': self._ecf_get_indicador_facturacion(doc_type, line)},
+                {'name': 'IndicadorBienoServicio', 'value': self._ecf_get_item_type(line, doc_type)},
             ]
 
             # MontoISRRetenido: solo cuando hay monto (se omite cuando es "0.00")
@@ -838,35 +885,84 @@ class AccountMove(models.Model):
         return items
 
     def _ecf_get_totals(self, doc_type, tax_data):
+        """Construye el bloque totals con additionalInfo plano.
+
+        El mapeador del sistema lee exclusivamente totals.additionalInfo (arreglo
+        name/value) para generar el XML de <Totales>. Los campos totalTaxes,
+        totalTaxableAmount y qtyItems son ignorados por el mapeador.
+        """
         self.ensure_one()
-        product_lines = self.invoice_line_ids.filtered(lambda l: l.display_type == 'product')
+        invoice_total = self._ecf_format_amount(self._convert_to_dop(self.amount_total))
+        totals = {'grandTotal': {'invoiceTotal': invoice_total}}
 
-        totals = {
-            'qtyItems': len(product_lines),
-            'totalTaxableAmount': self._ecf_format_amount(self._convert_to_dop(self.amount_untaxed)),
-        }
-
-        if doc_type == '47':
-            totals['totalTaxes'] = {
-                'totalTax': [{'code': 'EXENTO', 'amount': self._ecf_format_amount(self._convert_to_dop(self.amount_total))}],
-            }
-        else:
-            totals['totalTaxes'] = {'totalTax': tax_data.get('total_taxes', [])}
-
-        totals['grandTotal'] = {'invoiceTotal': self._ecf_format_amount(self._convert_to_dop(self.amount_total))}
-
-        # E41 requiere TotalITBISRetenido y TotalISRRetencion (XSD obliga, no tienen default)
+        # E41/E47: solo totales de retención (sin desglose de ITBIS)
         if doc_type in ('41', '47'):
-            totals_additional = [
+            ret_info = [
                 {'name': 'TotalISRRetencion', 'value': self._ecf_format_amount(tax_data.get('total_isr_retencion', 0.0))},
             ]
             if doc_type == '41':
-                totals_additional.append({
+                ret_info.append({
                     'name': 'TotalITBISRetenido',
                     'value': self._ecf_format_amount(tax_data.get('total_itbis_retenido', 0.0)),
                 })
-            totals['additionalInfo'] = totals_additional
+            totals['additionalInfo'] = ret_info
+            return totals
 
+        # E44 (Regímenes Especiales): siempre exento, sin ITBIS
+        if doc_type == '44':
+            exento = self._ecf_format_amount(self._convert_to_dop(self.amount_untaxed))
+            totals['additionalInfo'] = [
+                {'name': 'MontoExento', 'value': exento},
+                {'name': 'MontoTotal', 'value': invoice_total},
+            ]
+            return totals
+
+        # E46 (Exportaciones): ITBIS tasa cero — siempre ITBIS3 a 0%
+        if doc_type == '46':
+            base = self._ecf_format_amount(self._convert_to_dop(self.amount_untaxed))
+            totals['additionalInfo'] = [
+                {'name': 'MontoGravadoTotal', 'value': base},
+                {'name': 'MontoGravadoI3', 'value': base},
+                {'name': 'ITBIS3', 'value': '0'},
+                {'name': 'TotalITBIS', 'value': '0.00'},
+                {'name': 'TotalITBIS3', 'value': '0.00'},
+                {'name': 'MontoTotal', 'value': invoice_total},
+            ]
+            return totals
+
+        # Resto de tipos: construir additionalInfo desde los grupos de impuesto
+        total_taxes = tax_data.get('total_taxes', [])
+        itbis_entries = [t for t in total_taxes if t.get('code', '').startswith('ITBIS')]
+        has_exempt = tax_data.get('total_exempt', 0.0) > 0
+
+        additional_info = []
+
+        if itbis_entries:
+            total_taxable = sum(float(e.get('taxableAmount', 0)) for e in itbis_entries)
+            additional_info.append({
+                'name': 'MontoGravadoTotal',
+                'value': self._ecf_format_amount(total_taxable),
+            })
+            for entry in itbis_entries:
+                suffix = entry['code'].replace('ITBIS', '')  # '1', '2', '3', '4'
+                rate_int = int(round(float(entry.get('rate', '0'))))
+                additional_info.append({'name': f'MontoGravadoI{suffix}', 'value': entry.get('taxableAmount', '0.00')})
+                additional_info.append({'name': f'ITBIS{suffix}', 'value': str(rate_int)})
+
+            total_itbis = self._ecf_format_amount(tax_data.get('total_itbis', 0.0))
+            additional_info.append({'name': 'TotalITBIS', 'value': total_itbis})
+            for entry in itbis_entries:
+                suffix = entry['code'].replace('ITBIS', '')
+                additional_info.append({'name': f'TotalITBIS{suffix}', 'value': entry.get('amount', '0.00')})
+
+        if has_exempt:
+            additional_info.append({
+                'name': 'MontoExento',
+                'value': self._ecf_format_amount(tax_data.get('total_exempt', 0.0)),
+            })
+
+        additional_info.append({'name': 'MontoTotal', 'value': invoice_total})
+        totals['additionalInfo'] = additional_info
         return totals
 
     def _ecf_get_additional_doc_info(self, doc_type, tax_data):
@@ -886,6 +982,16 @@ class AccountMove(models.Model):
                     'name': 'NCFModificado',
                     'value': (ref_invoice.l10n_do_fiscal_number or ref_invoice.l10n_latam_document_number or '') if ref_invoice else '',
                 },
+            ]
+
+            # RNCOtroContribuyente: RNC del comprador en la factura original
+            rnc_otro = ''
+            if ref_invoice and ref_invoice.partner_id and ref_invoice.partner_id.vat:
+                rnc_otro = re.sub(r'[^0-9]', '', ref_invoice.partner_id.vat)
+            if rnc_otro:
+                ref_info.append({'name': 'RNCOtroContribuyente', 'value': rnc_otro})
+
+            ref_info.extend([
                 {
                     'name': 'FechaNCFModificado',
                     'value': ref_invoice.invoice_date.strftime('%d-%m-%Y') if ref_invoice and ref_invoice.invoice_date else '',
@@ -894,7 +1000,7 @@ class AccountMove(models.Model):
                     'name': 'CodigoModificacion',
                     'value': self.l10n_do_ecf_modification_code or '',
                 },
-            ]
+            ])
             if self.l10n_do_modification_reason:
                 ref_info.append({'name': 'RazonModificacion', 'value': self.l10n_do_modification_reason})
             data_blocks.append({'name': 'InformacionReferencia', 'info': ref_info})
@@ -920,7 +1026,9 @@ class AccountMove(models.Model):
         else:
             # MontoPago = monto total con impuestos que paga el comprador
             amount = self._ecf_format_amount(self._convert_to_dop(self.amount_total))
-        return [{'code': self.l10n_do_payment_type or '1', 'amount': amount}]
+        # El mapeador requiere código de 2 dígitos ("01", "02", etc.)
+        payment_code = (self.l10n_do_payment_type or '1').zfill(2)
+        return [{'code': payment_code, 'amount': amount}]
 
     # =========================================================================
     # CONSTRUCTOR PRINCIPAL
