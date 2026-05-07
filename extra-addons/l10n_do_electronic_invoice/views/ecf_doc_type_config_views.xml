@@ -1,5 +1,5 @@
 <odoo>
-    <!-- Vista list usada como inline en la empresa y como standalone -->
+    <!-- Vista principal: todos los tipos e-CF con toggle send_to_dgii -->
     <record id="view_ecf_doc_type_config_tree" model="ir.ui.view">
         <field name="name">l10n_do.ecf.doc.type.config.tree</field>
         <field name="model">l10n_do.ecf.doc.type.config</field>
@@ -7,13 +7,9 @@
             <list editable="bottom">
                 <field name="company_id" groups="base.group_multi_company" optional="hide"/>
                 <field name="doc_type"/>
-                <field name="is_ecf_purchase_type" column_invisible="1"/>
                 <field name="send_to_dgii" widget="boolean_toggle"/>
-                <field name="allow_manual_ncf"
-                       widget="boolean_toggle"
-                       string="NCF Manual"
-                       column_invisible="not is_ecf_purchase_type"/>
             </list>
         </field>
     </record>
+
 </odoo>

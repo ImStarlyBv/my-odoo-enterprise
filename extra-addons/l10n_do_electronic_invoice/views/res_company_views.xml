@@ -24,6 +24,16 @@
                             <field name="ecf_doc_type_config_ids" nolabel="1"
                                    context="{'default_company_id': id}"/>
                         </group>
+                        <group string="Numeración Manual – Comprobantes de Compra" col="1">
+                            <field name="ecf_doc_type_config_ids" nolabel="1"
+                                   domain="[('doc_type', 'in', ['31', '41', '43', '47'])]"
+                                   context="{'default_company_id': id}">
+                                <list editable="bottom">
+                                    <field name="doc_type"/>
+                                    <field name="allow_manual_ncf" widget="boolean_toggle" string="NCF Manual"/>
+                                </list>
+                            </field>
+                        </group>
                         <group string="Datos del Emisor">
                             <field name="l10n_do_trade_name"/>
                             <field name="l10n_do_economic_activity"/>
