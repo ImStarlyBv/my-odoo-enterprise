@@ -34,16 +34,16 @@
                 <field name="ecf_is_exhausted" invisible="1"/>
             </xpath>
 
-            <!-- Alertas de secuencia NCF — antes del selector de journal/moneda -->
-            <xpath expr="//div[@name='journal_div']" position="before">
-                <!-- Sin configurar o pocos disponibles (naranja) -->
-                <div class="alert alert-warning mb-1" role="alert"
+            <!-- Alertas de secuencia NCF — banner encima de la factura (entre header y sheet) -->
+            <xpath expr="//sheet" position="before">
+                <div class="alert alert-warning mb-0 rounded-0 border-0 border-bottom"
+                     role="alert"
                      invisible="not ecf_sequence_warning or ecf_is_exhausted or state != 'draft'">
                     <i class="fa fa-exclamation-triangle me-1"/>
                     <field name="ecf_sequence_warning" readonly="1" class="d-inline"/>
                 </div>
-                <!-- Agotados — publicación bloqueada (rojo) -->
-                <div class="alert alert-danger mb-1" role="alert"
+                <div class="alert alert-danger mb-0 rounded-0 border-0 border-bottom"
+                     role="alert"
                      invisible="not ecf_is_exhausted or state != 'draft'">
                     <i class="fa fa-ban me-1"/>
                     <field name="ecf_sequence_warning" readonly="1" class="d-inline"/>

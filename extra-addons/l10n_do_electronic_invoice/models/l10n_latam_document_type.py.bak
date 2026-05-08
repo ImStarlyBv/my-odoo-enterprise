@@ -43,26 +43,25 @@ class L10nLatamDocumentType(models.Model):
     def _compute_ecf_sequence_stats(self):
         company_id = self.env.company.id
         for doc_type in self:
-            # Skip unsaved records (NewId) — psycopg2 can't use them in SQL
-            if not isinstance(doc_type.id, int):
-                doc_type.ecf_last_used_sequence = 0
-                doc_type.ecf_remaining_sequences = 0
-                doc_type.ecf_sequence_status = 'unconfigured'
-                continue
-
             if not doc_type.ecf_sequence_max:
                 doc_type.ecf_last_used_sequence = 0
                 doc_type.ecf_remaining_sequences = 0
                 doc_type.ecf_sequence_status = 'unconfigured'
                 continue
 
+            # Número más alto entre facturas confirmadas de este tipo en la empresa activa
             self.env.cr.execute("""
-                SELECT COALESCE(MAX(l10n_do_sequence_number), 0)
+                SELECT COALESCE(
+                    MAX(CAST(
+                        REGEXP_REPLACE(l10n_latam_document_number, '^[A-Z]+[0-9]+', '')
+                        AS INTEGER
+                    )), 0
+                )
                 FROM account_move
                 WHERE company_id = %s
                   AND state = 'posted'
                   AND l10n_latam_document_type_id = %s
-                  AND l10n_do_sequence_number IS NOT NULL
+                  AND l10n_latam_document_number ~ '^[A-Z]+[0-9]+'
             """, (company_id, doc_type.id))
             last_used = self.env.cr.fetchone()[0] or 0
 
