@@ -28,50 +28,62 @@
                         invisible="ecf_validation_status != 'error'"/>
             </xpath>
 
-            <!-- Alerta de secuencia NCF (solo en borrador, cuando queda poco o está agotado) -->
-            <xpath expr="//field[@name='currency_id']" position="before">
-                <div class="alert alert-warning mb-0 ms-1"
-                     role="alert"
-                     invisible="not ecf_sequence_warning or ecf_is_exhausted">
+            <!-- Campos ECF invisibles necesarios para evaluar condiciones en el cliente -->
+            <xpath expr="//field[@name='restrict_mode_hash_table']" position="after">
+                <field name="ecf_sequence_warning" invisible="1"/>
+                <field name="ecf_is_exhausted" invisible="1"/>
+            </xpath>
+
+            <!-- Alertas de secuencia NCF — antes del selector de journal/moneda -->
+            <xpath expr="//div[@name='journal_div']" position="before">
+                <!-- Sin configurar o pocos disponibles (naranja) -->
+                <div class="alert alert-warning mb-1" role="alert"
+                     invisible="not ecf_sequence_warning or ecf_is_exhausted or state != 'draft'">
                     <i class="fa fa-exclamation-triangle me-1"/>
                     <field name="ecf_sequence_warning" readonly="1" class="d-inline"/>
                 </div>
-                <div class="alert alert-danger mb-0 ms-1"
-                     role="alert"
-                     invisible="not ecf_sequence_warning or not ecf_is_exhausted">
+                <!-- Agotados — publicación bloqueada (rojo) -->
+                <div class="alert alert-danger mb-1" role="alert"
+                     invisible="not ecf_is_exhausted or state != 'draft'">
                     <i class="fa fa-ban me-1"/>
                     <field name="ecf_sequence_warning" readonly="1" class="d-inline"/>
                 </div>
             </xpath>
 
-            <!-- Grupo ECF visible en el formulario principal, debajo de la moneda -->
-            <xpath expr="//field[@name='currency_id']" position="after">
+            <!-- Grupo ECF: info a la izquierda, QR a la derecha -->
+            <xpath expr="//notebook" position="before">
                 <group string="Facturación Electrónica (e-CF)"
-                       invisible="not is_ecf_invoice"
-                       col="2">
-                    <field name="ecf_validation_status" readonly="1"
-                           widget="badge"
-                           decoration-success="ecf_validation_status in ('1', 'success')"
-                           decoration-warning="ecf_validation_status in ('pending', '3')"
-                           decoration-danger="ecf_validation_status == 'error'"
-                           decoration-info="ecf_validation_status in ('4', 'rfce')"
-                           decoration-muted="ecf_validation_status == 'skipped'"/>
-                    <field name="l10n_do_currency_rate" invisible="not show_exchange_rate"/>
-                    <field name="show_exchange_rate" invisible="1"/>
-                    <field name="ecf_codigo_seguridad" readonly="1" invisible="not ecf_codigo_seguridad"/>
-                    <field name="ecf_fecha_firma" readonly="1" invisible="not ecf_fecha_firma"/>
-                    <field name="l10n_do_modification_reason"
-                           invisible="move_type != 'out_refund'"/>
+                       invisible="not is_ecf_invoice">
+                    <group>
+                        <field name="ecf_validation_status" readonly="1"
+                               widget="badge"
+                               decoration-success="ecf_validation_status in ('1', 'success')"
+                               decoration-warning="ecf_validation_status in ('pending', '3')"
+                               decoration-danger="ecf_validation_status == 'error'"
+                               decoration-info="ecf_validation_status in ('4', 'rfce')"
+                               decoration-muted="ecf_validation_status == 'skipped'"/>
+                        <field name="ecf_codigo_seguridad" readonly="1"
+                               invisible="not ecf_codigo_seguridad"/>
+                        <field name="ecf_fecha_firma" readonly="1"
+                               invisible="not ecf_fecha_firma"/>
+                        <field name="l10n_do_currency_rate"
+                               invisible="not show_exchange_rate"/>
+                        <field name="show_exchange_rate" invisible="1"/>
+                        <field name="l10n_do_modification_reason"
+                               invisible="move_type != 'out_refund'"/>
+                    </group>
+                    <group string="Código QR DGII" invisible="not ecf_qr_image">
+                        <field name="ecf_qr_image" widget="image" readonly="1" nolabel="1"
+                               options="{'size': [160, 160]}"/>
+                        <div class="text-muted small mt-1 text-center" style="font-size:11px;">
+                            Escanea para verificar en DGII
+                        </div>
+                    </group>
                 </group>
             </xpath>
 
-            <!-- QR de verificación DGII (permanece en la pestaña Otra Info) -->
+            <!-- Respuesta API DGII queda en Otra Información (info técnica) -->
             <xpath expr="//page[@id='other_tab']//group[@id='other_tab_group']" position="inside">
-                <group string="Código QR DGII"
-                       invisible="not is_ecf_invoice or not ecf_qr_image">
-                    <field name="ecf_qr_image" widget="image" readonly="1" nolabel="1"
-                           options="{'size': [120, 120]}"/>
-                </group>
                 <group string="Respuesta API DGII"
                        invisible="not is_ecf_invoice or not ecf_api_message">
                     <field name="ecf_api_message" readonly="1" nolabel="1"

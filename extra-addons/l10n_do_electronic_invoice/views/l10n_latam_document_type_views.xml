@@ -5,24 +5,62 @@
         <field name="inherit_id" ref="l10n_latam_invoice_document.view_document_type_form"/>
         <field name="arch" type="xml">
 
-            <!-- Habilitar edición del formulario para poder guardar los campos ECF -->
+            <!-- Habilitar edición para guardar los campos ECF -->
             <xpath expr="//form" position="attributes">
                 <attribute name="edit">1</attribute>
             </xpath>
 
-            <!-- Sección de control de secuencia NCF al pie del formulario -->
+            <!--
+                NOTA: la condición usa `code` (valor: 'E'), NO `doc_code_prefix`.
+                doc_code_prefix contiene el número completo (E31, E32, E43…),
+                mientras que code sí es 'E' para todos los tipos e-CF dominicanos.
+            -->
             <xpath expr="//group" position="after">
-                <group string="Secuencia NCF (e-CF)"
-                       invisible="not doc_code_prefix or doc_code_prefix != 'E'">
+                <group string="Secuencia NCF (e-CF)" invisible="code != 'E'">
+
+                    <!-- Alerta: sin configurar -->
+                    <div class="alert alert-warning mb-2" role="alert"
+                         invisible="ecf_sequence_max != 0">
+                        <i class="fa fa-exclamation-triangle me-1"/>
+                        <strong>Sin configurar.</strong>
+                        Ingresa el último NCF autorizado por la DGII para activar
+                        el control de comprobantes y las alertas en facturas.
+                    </div>
+
+                    <!-- Alerta: agotado -->
+                    <div class="alert alert-danger mb-2" role="alert"
+                         invisible="ecf_sequence_status != 'exhausted'">
+                        <i class="fa fa-ban me-1"/>
+                        <strong>Comprobantes agotados.</strong>
+                        Solicita un nuevo bloque de NCF a la DGII antes de emitir más facturas.
+                    </div>
+
+                    <!-- Alerta: pocos -->
+                    <div class="alert alert-warning mb-2" role="alert"
+                         invisible="ecf_sequence_status != 'low'">
+                        <i class="fa fa-exclamation-circle me-1"/>
+                        <strong>Pocos comprobantes disponibles.</strong>
+                        Quedan <field name="ecf_remaining_sequences" readonly="1" class="d-inline fw-bold"/> — solicita renovación pronto.
+                    </div>
+
+                    <!-- Configuración del límite y umbral -->
                     <group>
                         <field name="ecf_sequence_max"/>
                         <field name="ecf_warning_threshold"/>
                     </group>
-                    <group>
+
+                    <!-- Estadísticas (solo si hay max configurado) -->
+                    <group invisible="ecf_sequence_max == 0">
                         <field name="ecf_last_used_sequence" readonly="1"/>
                         <field name="ecf_remaining_sequences" readonly="1"/>
-                        <field name="ecf_sequence_status" readonly="1"/>
+                        <field name="ecf_sequence_status" readonly="1"
+                               widget="badge"
+                               decoration-success="ecf_sequence_status == 'ok'"
+                               decoration-warning="ecf_sequence_status == 'low'"
+                               decoration-danger="ecf_sequence_status == 'exhausted'"
+                               decoration-muted="ecf_sequence_status == 'unconfigured'"/>
                     </group>
+
                 </group>
             </xpath>
 

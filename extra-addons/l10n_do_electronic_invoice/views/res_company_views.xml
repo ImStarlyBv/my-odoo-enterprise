@@ -6,33 +6,13 @@
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
                 <page name="ecf_config" string="Facturación Electrónica (e-CF)">
+
+                    <!-- Fila 1: credenciales API + datos del emisor -->
                     <group>
-                        <group string="Configuración de Envío">
+                        <group string="Conexión API">
                             <field name="is_live" widget="boolean_toggle"/>
-                            <field name="ecf_auto_send" widget="boolean_toggle"/>
-                            <field name="l10n_do_enable_resend_button" widget="boolean_toggle"/>
-                            <field name="l10n_do_default_client"/>
                             <field name="ecf_api_url"/>
                             <field name="ecf_api_key" password="True"/>
-                        </group>
-                        <group string="Tipos de Comprobante" col="1">
-                            <button name="action_init_ecf_doc_type_config"
-                                    type="object"
-                                    string="Inicializar tipos de comprobante"
-                                    class="btn-secondary mb-2"
-                                    invisible="ecf_doc_type_config_ids != []"/>
-                            <field name="ecf_doc_type_config_ids" nolabel="1"
-                                   context="{'default_company_id': id}"/>
-                        </group>
-                        <group string="Numeración Manual – Comprobantes de Compra" col="1">
-                            <field name="ecf_doc_type_config_ids" nolabel="1"
-                                   domain="[('doc_type', 'in', ['31', '41', '43', '47'])]"
-                                   context="{'default_company_id': id}">
-                                <list editable="bottom">
-                                    <field name="doc_type"/>
-                                    <field name="allow_manual_ncf" widget="boolean_toggle" string="NCF Manual"/>
-                                </list>
-                            </field>
                         </group>
                         <group string="Datos del Emisor">
                             <field name="l10n_do_trade_name"/>
@@ -41,6 +21,37 @@
                             <field name="l10n_do_municipality_id"/>
                         </group>
                     </group>
+
+                    <!-- Fila 2: opciones de envío -->
+                    <group>
+                        <group string="Comportamiento">
+                            <field name="ecf_auto_send" widget="boolean_toggle"/>
+                            <field name="l10n_do_enable_resend_button" widget="boolean_toggle"/>
+                            <field name="l10n_do_default_client"/>
+                        </group>
+                    </group>
+
+                    <!-- Sección full-width: todos los tipos de comprobante -->
+                    <separator string="Tipos de Comprobante"/>
+                    <button name="action_init_ecf_doc_type_config"
+                            type="object"
+                            string="Inicializar tipos de comprobante"
+                            class="btn-secondary mb-2"
+                            invisible="ecf_doc_type_config_ids != []"/>
+                    <field name="ecf_doc_type_config_ids" nolabel="1"
+                           context="{'default_company_id': id}"/>
+
+                    <!-- Sección full-width: NCF manual solo para comprobantes de compra -->
+                    <separator string="Numeración Manual – Comprobantes de Compra"/>
+                    <field name="ecf_doc_type_config_ids" nolabel="1"
+                           domain="[('doc_type', 'in', ['31', '41', '43', '47'])]"
+                           context="{'default_company_id': id}">
+                        <list editable="bottom">
+                            <field name="doc_type"/>
+                            <field name="allow_manual_ncf" widget="boolean_toggle" string="NCF Manual"/>
+                        </list>
+                    </field>
+
                 </page>
             </xpath>
         </field>

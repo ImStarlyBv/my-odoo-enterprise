@@ -66,26 +66,15 @@ class ResCompany(models.Model):
     def action_init_ecf_doc_type_config(self):
         """Crea los registros de configuración para los 10 tipos e-CF si no existen.
         Idempotente: no modifica registros ya existentes.
-
-        allow_manual_ncf refleja el comportamiento base de l10n_do_accounting:
-        - E41 (e-informal), E43 (e-minor), E47 (e-exterior) → automático (False)
-        - E31 (e-fiscal) y demás tipos de compra → manual (True)
         """
         doc_types = ['31', '32', '33', '34', '41', '43', '44', '45', '46', '47']
-        # Tipos de compra cuyo comportamiento base es AUTO — preservar con False
-        _auto_purchase_types = {'41', '43', '47'}
         Config = self.env['l10n_do.ecf.doc.type.config']
         for company in self:
             existing = Config.search([('company_id', '=', company.id)]).mapped('doc_type')
             missing = [t for t in doc_types if t not in existing]
             if missing:
                 for doc_type in missing:
-                    Config.create({
-                        'company_id': company.id,
-                        'doc_type': doc_type,
-                        'send_to_dgii': True,
-                        'allow_manual_ncf': doc_type not in _auto_purchase_types,
-                    })
+                    Config.create({'company_id': company.id, 'doc_type': doc_type, 'send_to_dgii': True})
                 _logger.info(
                     "ECF: inicializados %d tipos de comprobante para '%s': %s",
                     len(missing), company.name, missing,
