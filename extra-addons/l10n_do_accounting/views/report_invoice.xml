@@ -324,8 +324,8 @@
         </xpath>
 
         <xpath expr="//div[@id='total']/div/table/t[@t-call='account.document_tax_totals']"
-               position="replace">
-            <t t-call="l10n_do_accounting.document_tax_totals"/>
+               position="attributes">
+            <attribute name="t-call">l10n_do_accounting.document_tax_totals</attribute>
         </xpath>
 
     </template>
