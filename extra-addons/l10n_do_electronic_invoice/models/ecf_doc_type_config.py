@@ -27,6 +27,7 @@ class L10nDoEcfDocTypeConfig(models.Model):
         required=True,
     )
     send_to_dgii = fields.Boolean(string='Enviar a la DGII', default=True)
+    allow_manual_ncf = fields.Boolean(string='NCF Manual', default=False)
 
     _sql_constraints = [
         (

@@ -10,9 +10,9 @@
                 <attribute name="edit">1</attribute>
             </xpath>
 
-            <!-- Campos invisibles cargados antes del sheet para que las condiciones
+            <!-- Campos invisibles cargados antes del group para que las condiciones
                  de los banners funcionen aunque el grupo este oculto (code != E). -->
-            <xpath expr="//sheet" position="before">
+            <xpath expr="//group" position="before">
                 <field name="ecf_sequence_max" invisible="1"/>
                 <field name="ecf_sequence_status" invisible="1"/>
                 <field name="ecf_remaining_sequences" invisible="1"/>
