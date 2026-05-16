@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fiscal POS – República Dominicana</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 15px;
+      color: #333;
+      background: #fff;
+      line-height: 1.65;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #714B67 0%, #017e84 100%);
+      color: #fff;
+      padding: 48px 40px 40px;
+    }
+    .hero h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .hero p {
+      font-size: 1.05rem;
+      opacity: .9;
+      max-width: 640px;
+    }
+    .badge {
+      display: inline-block;
+      margin-top: 16px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: .8rem;
+      letter-spacing: .5px;
+    }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 32px;
+    }
+
+    /* ── Section titles ── */
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #714B67;
+      border-bottom: 2px solid #f0e6ec;
+      padding-bottom: 8px;
+      margin: 36px 0 18px;
+    }
+    h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #017e84;
+      margin: 20px 0 8px;
+    }
+
+    /* ── Feature cards ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 4px;
+    }
+    .card {
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 20px 18px;
+      background: #fafafa;
+    }
+    .card .icon {
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+    }
+    .card strong {
+      display: block;
+      font-size: .95rem;
+      color: #222;
+      margin-bottom: 4px;
+    }
+    .card p {
+      font-size: .88rem;
+      color: #555;
+    }
+
+    /* ── Steps ── */
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      margin-top: 4px;
+    }
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 18px;
+    }
+    .steps li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #714B67;
+      color: #fff;
+      font-weight: 700;
+      font-size: .9rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .steps li .text strong {
+      display: block;
+      color: #222;
+      margin-bottom: 2px;
+    }
+    .steps li .text span {
+      font-size: .88rem;
+      color: #555;
+    }
+
+    /* ── Path pill ── */
+    .path {
+      display: inline-block;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: .88rem;
+      font-family: monospace;
+      color: #444;
+      margin: 6px 0;
+    }
+    .path span {
+      color: #714B67;
+      font-weight: 600;
+    }
+
+    /* ── Alert boxes ── */
+    .alert {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 18px 0;
+      font-size: .9rem;
+    }
+    .alert-info {
+      background: #e8f6f7;
+      border-left: 4px solid #017e84;
+      color: #0c5158;
+    }
+    .alert-warn {
+      background: #fff8e1;
+      border-left: 4px solid #f59e0b;
+      color: #7a5500;
+    }
+
+    /* ── Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+      margin-top: 8px;
+    }
+    th {
+      background: #714B67;
+      color: #fff;
+      text-align: left;
+      padding: 10px 14px;
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #ececec;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+
+    /* ── FAQ ── */
+    .faq-item {
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+    }
+    .faq-item .q {
+      font-weight: 700;
+      color: #222;
+      margin-bottom: 6px;
+    }
+    .faq-item .a {
+      font-size: .9rem;
+      color: #555;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      background: #f5f5f5;
+      border-top: 1px solid #e0e0e0;
+      text-align: center;
+      padding: 22px;
+      font-size: .82rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════ HERO ═══════════════════ -->
+<div class="hero">
+  <h1>Fiscal POS – República Dominicana</h1>
+  <p>
+    Permite emitir comprobantes fiscales (NCF) directamente desde el Punto de Venta
+    de Odoo, cumpliendo con la normativa de la DGII.
+  </p>
+  <span class="badge">Odoo 18 &nbsp;·&nbsp; v18.0.2.3.7</span>
+</div>
+
+<!-- ═══════════════════ CONTENIDO ═══════════════════ -->
+<div class="container">
+
+  <!-- ¿Qué hace este módulo? -->
+  <h2>¿Qué hace este módulo?</h2>
+  <p>
+    Cuando instalas <strong>Fiscal POS (Rep. Dominicana)</strong>, tu Punto de Venta
+    queda conectado al sistema de facturación fiscal de tu empresa. Esto significa que
+    cada venta genera automáticamente un NCF válido y una factura contable, sin que el
+    cajero tenga que salir del POS ni hacer ningún paso extra.
+  </p>
+
+  <div class="cards" style="margin-top:20px;">
+    <div class="card">
+      <div class="icon">🧾</div>
+      <strong>Generación automática de NCF</strong>
+      <p>El sistema asigna el comprobante fiscal correcto según el tipo de venta, sin intervención manual.</p>
+    </div>
+    <div class="card">
+      <div class="icon">📄</div>
+      <strong>Factura automática</strong>
+      <p>Toda orden fiscal crea su factura en contabilidad de forma inmediata al cerrar la venta.</p>
+    </div>
+    <div class="card">
+      <div class="icon">👤</div>
+      <strong>Cliente por defecto</strong>
+      <p>Si el cajero no selecciona cliente, la venta se registra a nombre de un cliente genérico configurable.</p>
+    </div>
+    <div class="card">
+      <div class="icon">↩️</div>
+      <strong>Notas de crédito</strong>
+      <p>Permite aplicar notas de crédito fiscales directamente al momento del pago en el POS.</p>
+    </div>
+    <div class="card">
+      <div class="icon">🗂️</div>
+      <strong>Historial de órdenes</strong>
+      <p>Puedes limitar cuántos días de ventas se muestran en el POS para mejorar el rendimiento.</p>
+    </div>
+    <div class="card">
+      <div class="icon">🔒</div>
+      <strong>Registro de seguridad</strong>
+      <p>Cada NCF generado se guarda en un log para recuperar la operación si ocurre un fallo de red.</p>
+    </div>
+  </div>
+
+  <!-- Requisitos previos -->
+  <h2>Requisitos antes de configurar</h2>
+  <div class="alert alert-warn">
+    <strong>Importante:</strong> Este módulo necesita que ya tengas instalados y
+    configurados los módulos <strong>Punto de Venta</strong> y
+    <strong>Contabilidad Fiscal RD (l10n_do_accounting)</strong>, incluyendo al menos
+    una <em>Secuencia Fiscal activa</em> para el tipo de comprobante que usarás.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Requisito</th>
+        <th>Dónde verificarlo</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Módulo <em>Punto de Venta</em> instalado</td>
+        <td>Aplicaciones &rarr; buscar "Punto de Venta"</td>
+      </tr>
+      <tr>
+        <td>Módulo <em>l10n_do_accounting</em> instalado</td>
+        <td>Aplicaciones &rarr; buscar "Contabilidad RD"</td>
+      </tr>
+      <tr>
+        <td>Diario de POS marcado como <em>Diario Fiscal</em></td>
+        <td>Contabilidad &rarr; Configuración &rarr; Diarios &rarr; editar el diario del POS</td>
+      </tr>
+      <tr>
+        <td>Al menos una Secuencia Fiscal <em>activa</em></td>
+        <td>Contabilidad &rarr; Configuración &rarr; Secuencias Fiscales</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Cómo configurarlo -->
+  <h2>Cómo configurarlo (paso a paso)</h2>
+
+  <h3>1 · Verifica el diario fiscal del POS</h3>
+  <p>El POS solo activará las funciones fiscales si su diario de ventas está marcado como fiscal.</p>
+  <div class="path">
+    <span>Contabilidad</span> → Configuración → Diarios →
+    selecciona el diario que usa tu POS → activa <span>"Diario Fiscal"</span>
+  </div>
+
+  <h3>2 · Abre la configuración del Punto de Venta</h3>
+  <p>Ve al menú del POS y entra en su configuración:</p>
+  <div class="path">
+    <span>Punto de Venta</span> → Configuración → Ajustes
+  </div>
+  <p style="margin-top:8px;">
+    Selecciona el punto de venta que quieres configurar en el selector de la parte superior.
+  </p>
+
+  <h3>3 · Establece el cliente por defecto</h3>
+  <p>
+    Busca la sección <strong>Contabilidad</strong> dentro de los ajustes. Ahí verás el campo
+    <em>"Cliente por defecto"</em>. Este cliente se usará automáticamente cuando el cajero
+    no seleccione ningún cliente en la venta.
+  </p>
+  <div class="alert alert-info">
+    Si dejas este campo vacío y el cajero no selecciona un cliente, la venta
+    <strong>no podrá completarse</strong> en modo fiscal. Se recomienda usar un cliente
+    genérico como "Consumidor Final".
+  </div>
+
+  <h3>4 · Configura el historial de órdenes (opcional)</h3>
+  <p>
+    En la sección de inventario/ajustes avanzados (visible solo para administradores técnicos)
+    encontrarás la opción <em>"Historial de órdenes"</em>. Puedes dejarlo en
+    <strong>"Todas las órdenes"</strong> o limitarlo a un número de días para mejorar
+    el rendimiento del POS cuando hay muchas ventas acumuladas.
+  </p>
+
+  <h3>5 · Crea o verifica las secuencias fiscales</h3>
+  <p>Sin secuencias activas no se pueden emitir NCF. Verifica que existan secuencias en estado <em>Activo</em>:</p>
+  <div class="path">
+    <span>Contabilidad</span> → Configuración → Secuencias Fiscales
+  </div>
+
+  <!-- Cómo funciona en el POS -->
+  <h2>Cómo funciona durante una venta</h2>
+
+  <ol class="steps">
+    <li>
+      <div class="text">
+        <strong>El cajero abre el POS y agrega productos</strong>
+        <span>El proceso es el mismo que en un POS normal. No hay diferencia visible en este paso.</span>
+      </div>
+    </li>
+    <li>
+      <div class="text">
+        <strong>Selecciona el tipo de comprobante (Tipo Fiscal)</strong>
+        <span>
+          En la pantalla de la orden aparece un botón para seleccionar el tipo fiscal
+          (ej. "Consumo", "Crédito Fiscal"). El cajero debe seleccionarlo antes de cobrar.
+        </span>
+      </div>
+    </li>
+    <li>
+      <div class="text">
+        <strong>(Opcional) Selecciona o busca el cliente</strong>
+        <span>
+          Si el cliente quiere su comprobante a su nombre (RNC), el cajero busca o crea
+          el cliente en la pantalla de socios. Si no se selecciona ninguno, se usa el
+          cliente por defecto configurado.
+        </span>
+      </div>
+    </li>
+    <li>
+      <div class="text">
+        <strong>Procesa el pago</strong>
+        <span>
+          El cajero selecciona el método de pago (efectivo, tarjeta, etc.) y confirma.
+          Si hay notas de crédito disponibles para el cliente, puede aplicarlas aquí.
+        </span>
+      </div>
+    </li>
+    <li>
+      <div class="text">
+        <strong>El sistema genera el NCF automáticamente</strong>
+        <span>
+          Al confirmar la venta, el sistema asigna el siguiente NCF disponible de la
+          secuencia fiscal correspondiente y crea la factura en contabilidad de forma
+          automática.
+        </span>
+      </div>
+    </li>
+    <li>
+      <div class="text">
+        <strong>El recibo impreso incluye el NCF</strong>
+        <span>
+          El comprobante que se entrega al cliente (impreso o digital) muestra el NCF,
+          la fecha de vencimiento del comprobante y los datos fiscales requeridos por la DGII.
+        </span>
+      </div>
+    </li>
+  </ol>
+
+  <!-- Tipos de comprobante -->
+  <h2>Tipos de comprobante disponibles</h2>
+  <p>
+    Los tipos de comprobante que aparecen en el POS dependen de las secuencias fiscales
+    activas en tu empresa. Los más comunes son:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Tipo</th>
+        <th>Cuándo usarlo</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Consumo (B02)</td>
+        <td>Ventas a personas físicas o clientes sin RNC que no necesitan deducir el ITBIS.</td>
+      </tr>
+      <tr>
+        <td>Crédito Fiscal (B01)</td>
+        <td>Ventas a empresas o profesionales que necesitan deducir el ITBIS.</td>
+      </tr>
+      <tr>
+        <td>Nota de Débito (B03)</td>
+        <td>Cuando se necesita incrementar el valor de una factura ya emitida.</td>
+      </tr>
+      <tr>
+        <td>Nota de Crédito (B04)</td>
+        <td>Devoluciones o descuentos sobre facturas fiscales ya emitidas.</td>
+      </tr>
+      <tr>
+        <td>Gubernamental (B15)</td>
+        <td>Ventas a entidades del gobierno dominicano.</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="alert alert-info">
+    Solo verás los tipos de comprobante que tengan secuencias fiscales <strong>activas</strong>
+    en tu sistema. Si falta algún tipo, debes crear la secuencia correspondiente en contabilidad.
+  </div>
+
+  <!-- Preguntas frecuentes -->
+  <h2>Preguntas frecuentes</h2>
+
+  <div class="faq-item">
+    <div class="q">¿Qué pasa si se agota una secuencia fiscal?</div>
+    <div class="a">
+      El sistema te avisará con un error al intentar procesar una venta. Debes ir a
+      Contabilidad → Configuración → Secuencias Fiscales y crear una nueva secuencia del
+      tipo correspondiente. Esto lo puede hacer el administrador o el contador.
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="q">¿Puedo usar este POS sin emitir comprobantes fiscales?</div>
+    <div class="a">
+      Sí. Si el diario del POS no está marcado como "Diario Fiscal", el POS funciona
+      de manera normal sin generar NCF. Las funciones fiscales solo se activan cuando
+      el diario está configurado como fiscal.
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="q">¿Las ventas del POS aparecen en el reporte 606?</div>
+    <div class="a">
+      Sí. Dado que cada venta crea una factura contable con su NCF, esas facturas
+      quedan incluidas automáticamente en el reporte 606 de ventas que genera el
+      módulo de contabilidad fiscal.
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="q">¿Qué pasa si se va la internet durante una venta?</div>
+    <div class="a">
+      El módulo guarda un registro del NCF generado antes de confirmar la orden.
+      Si ocurre un fallo de red, al reconectarse el sistema puede recuperar la operación
+      desde ese registro para evitar duplicar o perder el comprobante.
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="q">¿Puedo cambiar el cliente por defecto después de instalar?</div>
+    <div class="a">
+      Sí. Ve a Punto de Venta → Configuración → Ajustes, selecciona tu POS y cambia
+      el campo "Cliente por defecto" en la sección de Contabilidad. Guarda los cambios
+      y el próximo turno ya usará el nuevo cliente.
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="q">¿Cómo hago una devolución con nota de crédito?</div>
+    <div class="a">
+      En el POS, busca la orden original desde la pantalla de "Órdenes" (ícono de ticket).
+      Selecciónala y usa el botón de devolución. El sistema te pedirá el motivo y generará
+      automáticamente una nota de crédito (B04) vinculada a la venta original.
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════ FOOTER ═══════════════════ -->
+<div class="footer">
+  Fiscal POS RD &nbsp;·&nbsp; Odoo 18 &nbsp;·&nbsp;
+  Desarrollado por <strong>Guavana, Indexa, Iterativo SRL</strong> &nbsp;·&nbsp;
+  Licencia LGPL-3
+</div>
+
+</body>
+</html>
