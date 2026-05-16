@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- ============================================================
+         account.fiscal.sequence — Vistas
+    ============================================================ -->
+
+    <record id="account_fiscal_sequence_form" model="ir.ui.view">
+        <field name="name">account.fiscal.sequence.form</field>
+        <field name="model">account.fiscal.sequence</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_confirm" string="Confirmar" type="object"
+                            class="oe_highlight"
+                            invisible="state != 'draft'"/>
+                    <button name="action_queue" string="Poner en Cola" type="object"
+                            invisible="state != 'draft' or not can_be_queue"/>
+                    <button name="action_cancel" string="Cancelar" type="object"
+                            invisible="state in ('cancelled', 'draft')"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="active,depleted"/>
+                </header>
+                <sheet>
+                    <field name="can_be_queue" invisible="1"/>
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button"
+                                name="action_view_sequence"
+                                icon="fa-arrow-right"
+                                type="object"
+                                groups="base.group_system"
+                                invisible="not sequence_id">
+                            <span class="o_stat_text">Secuencia</span>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Ej: 8001695033"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="fiscal_type_id"
+                                   widget="selection"
+                                   domain="[('assigned_sequence', '=', True)]"/>
+                            <field name="sequence_start"/>
+                            <field name="sequence_end"/>
+                            <field name="expiration_date"/>
+                        </group>
+                        <group>
+                            <label string="Aviso de agotamiento" for="remaining_percentage"/>
+                            <div class="o_row" name="remaining_percentage">
+                                <field name="remaining_percentage"/>
+                                <span>%</span>
+                            </div>
+                            <field name="number_next_actual" groups="base.group_no_one"/>
+                            <field name="sequence_remaining"
+                                   invisible="state in ('draft', 'cancelled')"/>
+                            <field name="next_fiscal_number"
+                                   invisible="state in ('draft', 'cancelled', 'depleted')"/>
+                            <field name="type" invisible="1"/>
+                            <field name="sequence_id" invisible="1"/>
+                            <field name="warning_gap" invisible="1"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" widget="mail_followers"
+                           groups="base.group_user"/>
+                    <field name="message_ids" widget="mail_thread"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <record id="account_fiscal_sequence_list" model="ir.ui.view">
+        <field name="name">account.fiscal.sequence.list</field>
+        <field name="model">account.fiscal.sequence</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="fiscal_type_id"/>
+                <field name="next_fiscal_number"/>
+                <field name="sequence_start"/>
+                <field name="sequence_end"/>
+                <field name="state"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="account_fiscal_sequence_search" model="ir.ui.view">
+        <field name="name">account.fiscal.sequence.search</field>
+        <field name="model">account.fiscal.sequence</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="fiscal_type_id"/>
+                <filter name="draft" string="Borrador"
+                        domain="[('state','=','draft')]"/>
+                <filter name="active" string="Activa"
+                        domain="[('state','in',('active','draft'))]"/>
+                <filter name="queue" string="En Cola"
+                        domain="[('state','=','queue')]"/>
+                <filter name="depleted" string="Agotada"
+                        domain="[('state','=','depleted')]"/>
+                <filter name="expired" string="Vencida"
+                        domain="[('state','=','expired')]"/>
+                <filter name="cancelled" string="Cancelada"
+                        domain="[('state','=','cancelled')]"/>
+                <separator/>
+                <filter name="sale" string="Venta"
+                        domain="[('type','=','sale')]"/>
+                <filter name="purchase" string="Compra"
+                        domain="[('type','=','purchase')]"/>
+                <filter name="credit_note" string="Nota de Crédito"
+                        domain="[('type','=','credit_note')]"/>
+                <filter name="debit_note" string="Nota de Débito"
+                        domain="[('type','=','debit_note')]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_fiscal_type" string="Tipo Fiscal"
+                            domain="[]" context="{'group_by':'fiscal_type_id'}"/>
+                    <filter name="group_state" string="Estado"
+                            domain="[]" context="{'group_by':'state'}"/>
+                    <filter name="group_company" string="Compañía"
+                            domain="[]" context="{'group_by':'company_id'}"
+                            groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="account_fiscal_sequence_action" model="ir.actions.act_window">
+        <field name="name">Secuencias Fiscales</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">account.fiscal.sequence</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="account_fiscal_sequence_search"/>
+        <field name="context">{'search_default_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">
+                No se encontraron Secuencias Fiscales.
+            </p>
+            <p>
+                Crea tu primera Secuencia Fiscal aquí.
+            </p>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         account.fiscal.type — Vistas
+    ============================================================ -->
+
+    <record id="account_fiscal_type_form" model="ir.ui.view">
+        <field name="name">account.fiscal.type.form</field>
+        <field name="model">account.fiscal.type</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <group string="Identificación">
+                            <field name="name"/>
+                            <field name="prefix"/>
+                            <field name="type"/>
+                            <field name="journal_type" invisible="1"/>
+                            <field name="padding"/>
+                            <field name="assigned_sequence"/>
+                            <field name="requires_document"/>
+                        </group>
+                        <group string="Configuración">
+                            <field name="active"/>
+                            <field name="journal_id"
+                                   options="{'no_create': True}"
+                                   domain="[('type', '=', journal_type), ('l10n_do_fiscal_journal', '=', True)]"/>
+                            <field name="fiscal_position_id"/>
+                            <field name="l10n_latam_document_type_id"
+                                   options="{'no_create': True}"
+                                   help="Tipo de documento l10n_latam vinculado. Requerido para generar e-CF desde POS."/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="account_fiscal_type_list" model="ir.ui.view">
+        <field name="name">account.fiscal.type.list</field>
+        <field name="model">account.fiscal.type</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="prefix"/>
+                <field name="type"/>
+                <field name="l10n_latam_document_type_id"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="account_fiscal_type_action" model="ir.actions.act_window">
+        <field name="name">Tipos Fiscales</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">account.fiscal.type</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- ============================================================
+         Entradas de menú — hijos de DGII (menu_dgii_config)
+    ============================================================ -->
+
+    <menuitem
+            id="account_fiscal_sequence_menu"
+            action="account_fiscal_sequence_action"
+            parent="menu_dgii_config"
+            name="Secuencias Fiscales"
+            sequence="10"/>
+
+    <menuitem
+            id="account_fiscal_type_menu"
+            action="account_fiscal_type_action"
+            parent="menu_dgii_config"
+            name="Tipos Fiscales"
+            sequence="11"/>
+
+</odoo>
