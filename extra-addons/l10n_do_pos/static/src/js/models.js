@@ -5,6 +5,7 @@ import { PosStore } from "@point_of_sale/app/store/pos_store";
 import { PosOrder } from "@point_of_sale/app/models/pos_order";
 import { PosPayment } from "@point_of_sale/app/models/pos_payment";
 import { PosOrderline } from "@point_of_sale/app/models/pos_order_line";
+import { Orderline } from "@point_of_sale/app/generic_components/orderline/orderline";
 import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { _t } from "@web/core/l10n/translation";
 import { sprintf } from "@web/core/utils/strings";
@@ -179,6 +180,11 @@ patch(PosPayment.prototype, {
         this.credit_note_partner_id = partner_id;
     },
 });
+
+// ---------------------------------------------------------------------------
+// Orderline component — declare l10n_do_itbis so Owl props validation passes
+// ---------------------------------------------------------------------------
+Orderline.props.line.shape.l10n_do_itbis = { type: Number, optional: true };
 
 // ---------------------------------------------------------------------------
 // PosOrderline
