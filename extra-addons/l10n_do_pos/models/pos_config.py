@@ -68,19 +68,6 @@ class PosConfig(models.Model):
                 config.invoice_journal_id.l10n_do_document_type_ids
             )
 
-    @api.model
-    def _load_pos_data_fields(self, config_id):
-        result = super()._load_pos_data_fields(config_id)
-        result += [
-            'l10n_do_is_fiscal',
-            'l10n_do_default_consumer_partner_id',
-            'l10n_do_allow_vendor_ncf',
-            'l10n_do_order_history_type',
-            'l10n_do_order_history_days',
-            'l10n_do_ecf_auto_send',
-        ]
-        return result
-
     @api.constrains('l10n_do_allow_vendor_ncf', 'l10n_do_vendor_ncf_journal_id')
     def _check_vendor_ncf_journal(self):
         """El diario de proveedor es obligatorio cuando se habilita el registro de NCF proveedor."""

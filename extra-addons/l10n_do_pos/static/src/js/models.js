@@ -86,7 +86,7 @@ patch(PosOrder.prototype, {
         this.l10n_latam_document_type_id = vals.l10n_latam_document_type_id || false;
         this.l10n_do_fiscal_number = vals.l10n_do_fiscal_number || "";
         this.l10n_do_origin_ncf = vals.l10n_do_origin_ncf || "";
-        this.l10n_do_ncf_expiration_date = vals.l10n_do_ncf_expiration_date || "";
+        this.l10n_do_ncf_expiration_date = vals.l10n_do_ncf_expiration_date || false;
         this.document_type = false;
         // e-CF fields (populated after _finalize_fiscal_order if E3x)
         this.l10n_do_is_ecf = false;
@@ -94,13 +94,19 @@ patch(PosOrder.prototype, {
         this.ecf_codigo_seguridad = "";
         this.ecf_pending = false;
 
-        if (this.config?.l10n_do_is_fiscal) {
+        if (this.config?.l10n_do_is_fiscal && this.pos) {
+            const savedDate = this.l10n_do_ncf_expiration_date;
             if (this.l10n_latam_document_type_id) {
                 this.set_document_type(
                     this.pos.get_doc_type_by_id(this.l10n_latam_document_type_id)
                 );
             } else {
                 this.set_document_type(this.pos.get_default_doc_type());
+            }
+            // Prefer the date stored on the order (e.g. from a confirmed invoice)
+            // over the doc type default, so fiscal numbers already issued aren't affected.
+            if (savedDate) {
+                this.l10n_do_ncf_expiration_date = savedDate;
             }
         }
     },
@@ -112,6 +118,7 @@ patch(PosOrder.prototype, {
     set_document_type(doc_type) {
         this.document_type = doc_type;
         this.l10n_latam_document_type_id = doc_type?.id || false;
+        this.l10n_do_ncf_expiration_date = doc_type?.l10n_do_ncf_expiration_date || false;
 
         if (doc_type?.fiscal_position_id) {
             const fpId =
@@ -129,6 +136,13 @@ patch(PosOrder.prototype, {
     },
 
     get_document_type() {
+        if (!this.document_type && this.pos && this.config?.l10n_do_is_fiscal) {
+            if (this.l10n_latam_document_type_id) {
+                this.document_type = this.pos.get_doc_type_by_id(this.l10n_latam_document_type_id);
+            } else {
+                this.document_type = this.pos.get_default_doc_type();
+            }
+        }
         return this.document_type;
     },
 
@@ -164,7 +178,7 @@ patch(PosOrder.prototype, {
      */
     set_l10n_do_fiscal_data(data) {
         this.l10n_do_fiscal_number = data.l10n_do_fiscal_number || "";
-        this.l10n_do_ncf_expiration_date = data.l10n_do_ncf_expiration_date || "";
+        this.l10n_do_ncf_expiration_date = data.l10n_do_ncf_expiration_date || false;
         if (data.l10n_latam_document_type_id) {
             const dt = this.pos.get_doc_type_by_id(data.l10n_latam_document_type_id);
             if (dt) this.set_document_type(dt);

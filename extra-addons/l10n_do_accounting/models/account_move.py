@@ -577,7 +577,8 @@ class AccountMove(models.Model):
             )
 
             move.l10n_do_ncf_expiration_date = (
-                move.journal_id.l10n_do_document_type_ids.filtered(
+                move.l10n_latam_document_type_id.l10n_do_ncf_expiration_date
+                or move.journal_id.l10n_do_document_type_ids.filtered(
                     lambda doc: doc.l10n_latam_document_type_id
                     == move.l10n_latam_document_type_id
                 ).l10n_do_ncf_expiration_date

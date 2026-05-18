@@ -58,6 +58,10 @@ class L10nLatamDocumentType(models.Model):
     is_vat_required = fields.Boolean(
         default=False,
     )
+    l10n_do_ncf_expiration_date = fields.Date(
+        string="Vence NCF",
+        help="Fecha límite de vigencia de los comprobantes de este tipo, según autorización DGII.",
+    )
 
     def _format_document_number(self, document_number):
         """Make validation of Import Dispatch Number

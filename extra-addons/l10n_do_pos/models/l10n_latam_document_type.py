@@ -17,7 +17,8 @@ class L10nLatamDocumentType(models.Model):
         Filtra los tipos de documento disponibles para el POS activo.
         Solo devuelve los tipos asignados al diario de facturación del config.
         """
-        config = self.env['pos.config'].browse(data['config_id'])
+        config_id = data['pos.config']['data'][0]['id']
+        config = self.env['pos.config'].browse(config_id)
         doc_type_ids = (
             config.invoice_journal_id.l10n_do_document_type_ids
             .mapped('l10n_latam_document_type_id').ids
@@ -34,6 +35,7 @@ class L10nLatamDocumentType(models.Model):
             'l10n_do_ncf_type',
             'is_vat_required',
             'internal_type',
+            'l10n_do_ncf_expiration_date',
         ]
 
     def write(self, vals):

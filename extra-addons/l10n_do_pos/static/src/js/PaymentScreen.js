@@ -193,7 +193,7 @@ patch(PaymentScreen.prototype, {
             await super._finalizeValidation(...arguments);
 
             if (isFiscal && order.id && !order.l10n_do_fiscal_number) {
-                const data = await this.data.call(
+                const data = await this.pos.data.call(
                     "pos.order",
                     "_finalize_fiscal_order",
                     [order.id]
@@ -205,7 +205,7 @@ patch(PaymentScreen.prototype, {
                     let qrReady = false;
                     for (let attempt = 0; attempt < 3 && !qrReady; attempt++) {
                         await new Promise((resolve) => setTimeout(resolve, 2000));
-                        const ecfResult = await this.data.call(
+                        const ecfResult = await this.pos.data.call(
                             "pos.order",
                             "poll_ecf_status",
                             [order.id]

@@ -9,6 +9,8 @@
             <field name='doc_code_prefix' position="after">
                 <field name='l10n_do_ncf_type'/>
                 <field name='is_vat_required'/>
+                <field name='l10n_do_ncf_expiration_date'
+                       invisible="country_id.code != 'DO'"/>
             </field>
         </field>
     </record>
@@ -20,6 +22,8 @@
         <field name="arch" type="xml">
             <field name='doc_code_prefix' position="after">
                 <field name='l10n_do_ncf_type'/>
+                <field name='l10n_do_ncf_expiration_date' optional="show"
+                       invisible="country_id.code != 'DO'"/>
             </field>
         </field>
     </record>
