@@ -1,5 +1,3 @@
-from . import account_fiscal_type
-from . import account_fiscal_sequence
 from . import res_partner
 from . import res_company
 from . import l10n_latam_document_type

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Acción: listar facturas de proveedor registradas desde POS -->
+    <record id="action_l10n_do_pos_vendor_ncf" model="ir.actions.act_window">
+        <field name="name">NCF Proveedor desde POS</field>
+        <field name="res_model">account.move</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('move_type', '=', 'in_invoice'), ('l10n_do_pos_vendor_ncf', '=', True)]</field>
+        <field name="context">{'default_move_type': 'in_invoice', 'default_l10n_do_pos_vendor_ncf': True}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No hay comprobantes de proveedor registrados desde el POS.
+            </p>
+            <p>
+                Habilita "Registrar NCF proveedor desde POS" en los ajustes del punto de venta
+                para que los cajeros puedan capturar comprobantes de proveedores.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menú: Proveedores → NCF Proveedor POS -->
+    <menuitem
+        id="menu_l10n_do_pos_vendor_ncf"
+        name="NCF Proveedor POS"
+        parent="account.menu_finance_payables"
+        action="action_l10n_do_pos_vendor_ncf"
+        sequence="99"
+        groups="account.group_account_invoice"/>
+
+</odoo>

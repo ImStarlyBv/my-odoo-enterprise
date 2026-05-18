@@ -1,8 +1,16 @@
-from odoo import models, _
+from odoo import models, fields, _
 from odoo.exceptions import UserError
+
 
 class AccountMove(models.Model):
     _inherit = 'account.move'
+
+    l10n_do_pos_vendor_ncf = fields.Boolean(
+        string='NCF proveedor POS',
+        default=False,
+        copy=False,
+        help='Marcado cuando esta factura de proveedor fue registrada desde el POS.',
+    )
     
     def check_pos_session(self):
         for move in self:

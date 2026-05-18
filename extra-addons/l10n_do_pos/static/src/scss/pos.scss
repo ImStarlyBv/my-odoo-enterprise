@@ -151,17 +151,64 @@
 .total-hidden {
     display: none;
 }
-.pos-receipt-font-75{
+.pos-receipt-font-75 {
     font-size: 75%;
 }
-.pos-receipt-fiscal-type-name{
+
+// --- SetDocumentTypeButton ---
+.l10n-do-doc-type-button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--headings-color, #333);
+    font-weight: 500;
+
+    i { font-size: 1.1rem; }
+
+    .l10n-do-ecf-icon { color: #6c2bd9; }
+}
+
+// Badge NCF / e-CF junto al nombre del comprobante
+.l10n-do-type-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+    line-height: 1.4;
+
+    &--ecf {
+        background: #6c2bd9;
+        color: #fff;
+    }
+
+    &--ncf {
+        background: #198754;
+        color: #fff;
+    }
+}
+
+// --- VendorNcfButton ---
+.l10n-do-vendor-ncf-button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--headings-color, #333);
+    font-weight: 500;
+
+    i { font-size: 1.1rem; color: #0d6efd; }
+}
+
+// --- Recibo DGII ---
+.pos-receipt-fiscal-type-name {
     font-weight: bold;
-    border-style:dashed;
-    border-width:2px;
-    border-right:0px;
-    border-left:0px;
-    border-bottom: 0px;
-    padding:10px 10px;
+    border-style: dashed;
+    border-width: 2px;
+    border-right: 0;
+    border-left: 0;
+    border-bottom: 0;
+    padding: 10px;
     text-align: center;
 }
 .do-pos-receipt-titles{
@@ -188,5 +235,43 @@
 }
 .do-pos-receipt-lines .right {
     text-align: right;
-    flex: 1; 
+    flex: 1;
+}
+
+// --- Pie fiscal DGII (subtotales + ITBIS) ---
+.do-pos-receipt-fiscal-footer {
+    margin-top: 6px;
+    border-top: 2px dashed #000;
+    padding-top: 6px;
+}
+
+.do-pos-receipt-footer-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 85%;
+    padding: 2px 0;
+
+    &.do-pos-receipt-footer-total {
+        font-weight: bold;
+        font-size: 100%;
+        border-top: 1px dashed #000;
+        margin-top: 4px;
+        padding-top: 4px;
+    }
+}
+
+// --- Sección e-CF en recibo ---
+.do-pos-receipt-ecf-qr {
+    margin: 6px 0;
+
+    img {
+        display: block;
+        margin: 0 auto;
+    }
+}
+
+.do-pos-receipt-ecf-security {
+    font-size: 70%;
+    word-break: break-all;
+    padding: 2px 0 4px;
 }

@@ -7,5 +7,5 @@ from . import pos_session
 from . import pos_payment_method
 from . import pos_payment
 from . import res_partner
-from . import account_fiscal_type
+from . import l10n_latam_document_type
 from . import account_move

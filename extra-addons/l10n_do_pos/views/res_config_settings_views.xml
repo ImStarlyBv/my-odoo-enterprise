@@ -6,23 +6,55 @@
         <field name="model">res.config.settings</field>
         <field name="inherit_id" ref="point_of_sale.res_config_settings_view_form"/>
         <field name="arch" type="xml">
-            
-            <xpath expr="//block[@id='pos_accounting_section']" position="inside">
-                <field name="l10n_do_fiscal_journal" invisible="1"/>
-                <setting string="Default customer" company_dependent="1" help="Default customer for fiscal POS orders">
-                    <field name="pos_partner_id" required="l10n_do_fiscal_journal"/>
-                </setting>
-            </xpath>
 
-            <xpath expr="//setting[@id='update_quantities_stock_setting']" position="after">
-                <setting id="l10n_do_order_history_setting" groups="base.group_no_one" string="Order history" company_dependent="1" help="Limit order history">
-                    <field name="l10n_do_type_limit_order_history" widget="radio"/>
-                    <div class="row" invisible="l10n_do_type_limit_order_history != 'days'">
-                        <label for="l10n_do_type_limit_order_history_days" string="Max quantity days" class="col-lg-3 o_light_label"/>
-                        <field name="l10n_do_type_limit_order_history_days" class="oe_inline"/>
+            <xpath expr="//block[@id='pos_accounting_section']" position="inside">
+                <!-- Campo oculto para condicionar visibilidad del bloque -->
+                <field name="l10n_do_is_fiscal" invisible="1"/>
+
+                <!-- Cliente consumidor por defecto (B02/E32) -->
+                <setting string="Cliente consumidor por defecto"
+                         company_dependent="1"
+                         help="Partner usado en ventas B02/E32 sin cliente identificado."
+                         invisible="not l10n_do_is_fiscal">
+                    <field name="l10n_do_default_consumer_partner_id"
+                           required="l10n_do_is_fiscal"/>
+                </setting>
+
+                <!-- NCF proveedor desde POS -->
+                <setting string="Registrar NCF proveedor desde POS"
+                         company_dependent="1"
+                         help="Habilita un botón para registrar comprobantes de proveedor desde el cajero."
+                         invisible="not l10n_do_is_fiscal">
+                    <field name="l10n_do_allow_vendor_ncf"/>
+                    <div class="row" invisible="not l10n_do_allow_vendor_ncf">
+                        <label for="l10n_do_vendor_ncf_journal_id"
+                               string="Diario de compras"
+                               class="col-lg-3 o_light_label"/>
+                        <field name="l10n_do_vendor_ncf_journal_id"
+                               class="oe_inline"
+                               required="l10n_do_allow_vendor_ncf"/>
                     </div>
                 </setting>
             </xpath>
+
+            <!-- Límite de historial de órdenes -->
+            <xpath expr="//setting[@id='update_quantities_stock_setting']" position="after">
+                <setting id="l10n_do_order_history_setting"
+                         string="Historial de órdenes"
+                         company_dependent="1"
+                         help="Controla cuántas órdenes se muestran en el historial del POS."
+                         invisible="not l10n_do_is_fiscal">
+                    <field name="l10n_do_order_history_type" widget="radio"/>
+                    <div class="row" invisible="l10n_do_order_history_type != 'days'">
+                        <label for="l10n_do_order_history_days"
+                               string="Días a mostrar"
+                               class="col-lg-3 o_light_label"/>
+                        <field name="l10n_do_order_history_days" class="oe_inline"/>
+                    </div>
+                </setting>
+            </xpath>
+
         </field>
     </record>
+
 </odoo>

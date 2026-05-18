@@ -17,9 +17,6 @@ class AccountJournal(models.Model):
             ("others", _("Other Sale Type")),
         ]
 
-    l10n_do_fiscal_journal = fields.Boolean(
-        string="Fiscal Journal",
-    )
     l10n_do_payment_form = fields.Selection(
         selection="_get_l10n_do_payment_form",
         string="Payment Form",

@@ -1,8 +1,22 @@
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
 
+
 class PosPaymentMethod(models.Model):
+    """
+    Agrega el campo is_credit_note para identificar el método de pago
+    especial que permite aplicar notas de crédito como medio de pago en el POS.
+
+    Restricciones:
+    - split_transactions debe estar activo (el sistema necesita identificar el partner)
+    - No debe tener journal_id (la NC no genera un nuevo movimiento bancario)
+    """
     _inherit = 'pos.payment.method'
+
+    is_credit_note = fields.Boolean(
+        string='Nota de Crédito',
+        help='Activa este método para permitir pagar con notas de crédito dominicanas.',
+    )
 
     @api.model
     def _load_pos_data_fields(self, config_id):
@@ -10,19 +24,16 @@ class PosPaymentMethod(models.Model):
         result.append('is_credit_note')
         return result
 
-    
-    is_credit_note = fields.Boolean(
-        string='Credit Note',
-    )
-
-    @api.constrains('is_credit_note')
+    @api.constrains('is_credit_note', 'split_transactions', 'journal_id')
     def _check_is_credit_note(self):
-        for record in self:
-            if record.is_credit_note:
-                if not record.split_transactions:
-                    raise ValidationError(
-                        _('Identify customer must be true if is credit note is true.'))
-
-                if record.journal_id:
-                    raise ValidationError(
-                        _('Journal must be empty if is credit note is true.'))
+        for rec in self:
+            if rec.is_credit_note:
+                if not rec.split_transactions:
+                    raise ValidationError(_(
+                        '"Identificar cliente" debe estar activo en el método '
+                        'de pago Nota de Crédito.'
+                    ))
+                if rec.journal_id:
+                    raise ValidationError(_(
+                        'El método de pago Nota de Crédito no debe tener diario.'
+                    ))

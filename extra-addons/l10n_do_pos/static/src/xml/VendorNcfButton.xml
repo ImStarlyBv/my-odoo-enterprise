@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="l10n_do_pos.VendorNcfButton">
+        <div class="l10n-do-vendor-ncf-button button" t-on-click="onClick"
+             title="Registrar NCF de proveedor">
+            <i class="fa fa-file-text me-1"
+               role="img"
+               aria-label="Registrar NCF proveedor"
+               title="Registrar comprobante de proveedor"/>
+            <span><t t-esc="_t('NCF Proveedor')"/></span>
+        </div>
+    </t>
+
+</templates>

@@ -11,11 +11,6 @@
             </xpath>
             <xpath expr="//field[@name='property_supplier_payment_term_id']" position="after">
                 <field name="l10n_do_expense_type"/>
-                <!-- Tipos fiscales POS: tipo de comprobante por defecto para ventas y compras -->
-                <field name="sale_fiscal_type_id"
-                       domain="[('type', 'in', ('sale', 'credit_note', 'debit_note'))]"/>
-                <field name="purchase_fiscal_type_id"
-                       domain="[('type', 'in', ('purchase', 'credit_note', 'debit_note'))]"/>
             </xpath>
         </field>
     </record>

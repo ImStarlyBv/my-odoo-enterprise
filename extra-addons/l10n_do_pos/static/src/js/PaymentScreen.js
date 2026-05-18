@@ -6,389 +6,412 @@ import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { makeAwaitable } from "@point_of_sale/app/store/make_awaitable_dialog";
 import { SelectionPopup } from "@point_of_sale/app/utils/input_popups/selection_popup";
 import { TextInputPopup } from "@point_of_sale/app/utils/input_popups/text_input_popup";
+import { SetDocumentTypeButton } from "@l10n_do_pos/js/buttons/SetDocumentTypeButton";
+import { VendorNcfButton } from "@l10n_do_pos/js/buttons/VendorNcfButton";
 import { _t } from "@web/core/l10n/translation";
 import { sprintf } from "@web/core/utils/strings";
-import { SetFiscalTypeButton } from "@l10n_do_pos/js/buttons/SetFiscalTypeButton";
 
-// Register SetFiscalTypeButton so it can be used in PaymentScreen templates
-PaymentScreen.components = { ...PaymentScreen.components, SetFiscalTypeButton };
+PaymentScreen.components = { ...PaymentScreen.components, SetDocumentTypeButton, VendorNcfButton };
 
 patch(PaymentScreen.prototype, {
+    /**
+     * Validaciones DGII antes de procesar el pago.
+     * Orden de validaciones según normativa:
+     *  1. Total > 0
+     *  2. Métodos de pago compatibles
+     *  3. Tipo de comprobante seleccionado
+     *  4. RNC/Cédula cuando el tipo lo requiere
+     *  5. Venta >= RD$250,000 requiere cliente identificado
+     *  6. B14/E44 no puede tener ITBIS ni ISC
+     *  7. Dirección de la orden (refund vs invoice)
+     *  8. Líneas con cantidad cero
+     *  9. Partner de NC coincide con orden
+     */
     async validateOrder(isForceValidate) {
-        if (this.pos.config.l10n_do_fiscal_journal) {
-            const current_order = this.currentOrder;
-            const client = current_order.get_partner();
-            const total = current_order.get_total_with_tax();
-            const fiscal_type = current_order.get_fiscal_type();
+        if (!this.pos.config.l10n_do_is_fiscal) {
+            return super.validateOrder(...arguments);
+        }
 
-            if (total === 0) {
+        const order = this.currentOrder;
+        const client = order.get_partner();
+        const total = order.get_total_with_tax();
+        const doc_type = order.get_document_type();
+
+        if (total === 0) {
+            this.dialog.add(AlertDialog, {
+                title: _t("Venta en cero"),
+                body: _t("No puedes realizar ventas en cero. Agrega un producto con valor."),
+            });
+            return;
+        }
+
+        if (!await this.analyze_payment_methods()) return;
+
+        if (!doc_type) {
+            this.dialog.add(AlertDialog, {
+                title: _t("Tipo de comprobante requerido"),
+                body: _t("Selecciona un tipo de comprobante para continuar."),
+            });
+            return;
+        }
+
+        if (doc_type.is_vat_required && !client) {
+            this.dialog.add(AlertDialog, {
+                title: _t("Cliente requerido"),
+                body: sprintf(
+                    _t("El tipo \"%s\" requiere un cliente con RNC o Cédula."),
+                    doc_type.name
+                ),
+            });
+            return;
+        }
+
+        if (doc_type.is_vat_required && !client?.vat) {
+            this.dialog.add(AlertDialog, {
+                title: _t("RNC / Cédula requerido"),
+                body: sprintf(
+                    _t("El tipo \"%s\" requiere que el cliente tenga RNC o Cédula."),
+                    doc_type.name
+                ),
+            });
+            return;
+        }
+
+        if (doc_type.is_vat_required && client?.vat) {
+            const cleaned = client.vat.replace(/[-\s]/g, "");
+            if (cleaned.length !== 9 && cleaned.length !== 11) {
                 this.dialog.add(AlertDialog, {
-                    title: _t("Sale in 0"),
-                    body: _t("You cannot make sales in 0, please add a product with value"),
+                    title: _t("RNC / Cédula inválido"),
+                    body: _t("El RNC debe tener 9 dígitos y la Cédula 11, sin guiones ni espacios."),
                 });
                 return;
             }
+        }
 
-            if (!await this.analyze_payment_methods()) {
-                return;
+        if (total >= 250000.0 && (!client || !client.vat)) {
+            this.dialog.add(AlertDialog, {
+                title: _t("Venta mayor a RD$ 250,000.00"),
+                body: _t("La normativa DGII exige identificar al cliente en ventas iguales o mayores a RD$ 250,000."),
+            });
+            return;
+        }
+
+        // B14 / E44 no pueden tener ITBIS ni ISC
+        const specialTypes = ["special", "e-special"];
+        if (specialTypes.includes(doc_type.l10n_do_ncf_type)) {
+            let hasTaxes = false;
+            for (const line of order.get_orderlines()) {
+                for (const tax of line._getProductTaxesAfterFiscalPosition?.() || []) {
+                    if (
+                        (tax.tax_group_id?.name === "ITBIS" && tax.amount !== 0) ||
+                        tax.tax_group_id?.name === "ISC"
+                    ) {
+                        hasTaxes = true;
+                        break;
+                    }
+                }
+                if (hasTaxes) break;
             }
-
-            if (!current_order.fiscal_type) {
+            if (hasTaxes) {
                 this.dialog.add(AlertDialog, {
-                    title: _t("Required fiscal type"),
-                    body: _t("Please select a fiscal type"),
-                });
-                return;
-            }
-
-            if (fiscal_type.requires_document && !client) {
-                this.dialog.add(AlertDialog, {
-                    title: _t("Required document (RNC/Cedula)"),
+                    title: sprintf(_t("Error con %s"), doc_type.name),
                     body: sprintf(
-                        _t("For invoice fiscal type %s its necessary customer, please select customer"),
-                        fiscal_type.name
+                        _t("El tipo \"%s\" no puede tener ITBIS ni ISC. Cambia la posición fiscal para eliminarlos."),
+                        doc_type.name
                     ),
                 });
                 return;
             }
+        }
 
-            if (fiscal_type.requires_document && !client.vat) {
-                this.dialog.add(AlertDialog, {
-                    title: _t("Required document (RNC/Cedula)"),
-                    body: sprintf(
-                        _t("For invoice fiscal type %s it is necessary for the customer have RNC or Cedula"),
-                        fiscal_type.name
-                    ),
-                });
-                return;
-            }
+        if (doc_type.internal_type === "credit_note" && total > 0) {
+            this.dialog.add(AlertDialog, {
+                title: sprintf(_t("Error con %s"), doc_type.name),
+                body: _t("Una nota de crédito no puede tener monto positivo."),
+            });
+            return;
+        }
 
+        if (doc_type.internal_type === "invoice" && total < 0) {
+            this.dialog.add(AlertDialog, {
+                title: sprintf(_t("Error con %s"), doc_type.name),
+                body: _t("Una factura de venta no puede tener monto negativo."),
+            });
+            return;
+        }
+
+        const zeroQtyLines = order
+            .get_orderlines()
+            .filter((l) => l.quantity === 0)
+            .map((l) => l.product_id.display_name);
+
+        if (zeroQtyLines.length > 0) {
+            this.dialog.add(AlertDialog, {
+                title: _t("Productos con cantidad cero"),
+                body: _t("Los siguientes productos tienen cantidad cero: ") + zeroQtyLines.join(", "),
+            });
+            return;
+        }
+
+        for (const line of order.payment_ids) {
             if (
-                fiscal_type.requires_document &&
-                !(client.vat.length === 9 || client.vat.length === 11)
+                line.credit_note_partner_id &&
+                client &&
+                line.credit_note_partner_id !== client.id
             ) {
                 this.dialog.add(AlertDialog, {
-                    title: _t("Incorrect document (RNC/Cedula)"),
-                    body: sprintf(
-                        _t("For invoice fiscal type %s it is necessary for the customer have correct RNC or Cedula without dashes or spaces"),
-                        fiscal_type.name
-                    ),
+                    title: _t("Cliente de NC no coincide"),
+                    body: _t("El cliente de la nota de crédito no coincide con el de la orden."),
                 });
                 return;
-            }
-
-            if (total >= 250000.0 && (!client || !client.vat)) {
-                this.dialog.add(AlertDialog, {
-                    title: _t("Sale greater than RD$ 250,000.00"),
-                    body: _t("For this sale it is necessary for the customer have ID"),
-                });
-                return;
-            }
-
-            if (["B14", "E14"].includes(fiscal_type.code)) {
-                let has_taxes = false;
-                current_order.get_orderlines().forEach((orderline) => {
-                    orderline._getProductTaxesAfterFiscalPosition?.().forEach((tax) => {
-                        if (
-                            (tax.tax_group_id?.name === "ITBIS" && tax.amount !== 0) ||
-                            tax.tax_group_id?.name === "ISC"
-                        ) {
-                            has_taxes = true;
-                        }
-                    });
-                });
-                if (has_taxes) {
-                    this.dialog.add(AlertDialog, {
-                        title: sprintf(_t("Error with Fiscal Type %s"), fiscal_type.name),
-                        body: sprintf(
-                            _t("You cannot pay order of Fiscal Type %s with ITBIS/ISC. Please select correct fiscal position for remove ITBIS and ISC"),
-                            fiscal_type.name
-                        ),
-                    });
-                    return;
-                }
-            }
-
-            if (fiscal_type.type === "out_refund" && total > 0) {
-                this.dialog.add(AlertDialog, {
-                    title: sprintf(_t("Error with Fiscal Type %s"), fiscal_type.name),
-                    body: sprintf(
-                        _t("You cannot pay order of Fiscal Type %s with amount greater than 0. Please select delete the order and create a new one"),
-                        fiscal_type.name
-                    ),
-                });
-                return;
-            }
-
-            if (fiscal_type.type === "out_invoice" && total < 0) {
-                this.dialog.add(AlertDialog, {
-                    title: sprintf(_t("Error with Fiscal Type %s"), fiscal_type.name),
-                    body: sprintf(
-                        _t("You cannot pay order of Fiscal Type %s with amount less than 0. Please select delete the order and create a new one"),
-                        fiscal_type.name
-                    ),
-                });
-                return;
-            }
-
-            const zeroQtyLines = current_order
-                .get_orderlines()
-                .filter((l) => l.quantity === 0)
-                .map((l) => l.product_id.display_name);
-
-            if (zeroQtyLines.length > 0) {
-                this.dialog.add(AlertDialog, {
-                    title: _t("Zero Quantity Products"),
-                    body:
-                        _t("The following products have zero quantity in the order: ") +
-                        zeroQtyLines.join(", ") +
-                        _t(". Please remove them or set a valid quantity."),
-                });
-                return;
-            }
-
-            for (const line of current_order.payment_ids) {
-                if (line.credit_note_partner_id && client && line.credit_note_partner_id !== client.id) {
-                    this.dialog.add(AlertDialog, {
-                        title: _t("Credit Note Partner Mismatch"),
-                        body: _t(
-                            "The customer associated with the credit note does not match the customer on the order. Please select the correct customer."
-                        ),
-                    });
-                    return;
-                }
             }
         }
 
         await super.validateOrder(...arguments);
     },
 
+    /**
+     * Después de que super guarda la orden al servidor (lo que dispara
+     * _process_saved_order → invoice creation → NCF assignment), leemos
+     * el NCF de vuelta y lo almacenamos en la orden local.
+     *
+     * Si el NCF es e-CF (prefijo E3x) y el QR no está disponible aún,
+     * se hace polling hasta 3 veces (cada 2s). Si el QR no llega, se
+     * muestra una alerta informando que el recibo se imprimirá sin QR.
+     *
+     * Owl re-renderiza el recibo reactivamente con los datos disponibles.
+     */
     async _finalizeValidation() {
-        const current_order = this.currentOrder;
-        if (
-            this.pos.config.l10n_do_fiscal_journal &&
-            !current_order.to_invoice &&
-            !current_order.ncf
-        ) {
+        const order = this.currentOrder;
+        const isFiscal = this.pos.config.l10n_do_is_fiscal;
+
+        if (isFiscal) {
             this.env.services.ui.block();
-            try {
-                const fiscal_data = await this.pos.get_fiscal_data(current_order);
-                console.log("NCF Generated", fiscal_data);
-                current_order.set_l10n_do_fiscal_data(fiscal_data);
-            } catch (error) {
-                this.env.services.ui.unblock();
-                throw error;
-            }
-            this.env.services.ui.unblock();
         }
-        await super._finalizeValidation();
+
+        try {
+            await super._finalizeValidation(...arguments);
+
+            if (isFiscal && order.id && !order.l10n_do_fiscal_number) {
+                const data = await this.data.call(
+                    "pos.order",
+                    "_finalize_fiscal_order",
+                    [order.id]
+                );
+                order.set_l10n_do_fiscal_data(data);
+
+                // Polling e-CF: si el QR no llegó aún, reintentar hasta 3 veces
+                if (data.is_ecf && data.ecf_pending) {
+                    let qrReady = false;
+                    for (let attempt = 0; attempt < 3 && !qrReady; attempt++) {
+                        await new Promise((resolve) => setTimeout(resolve, 2000));
+                        const ecfResult = await this.data.call(
+                            "pos.order",
+                            "poll_ecf_status",
+                            [order.id]
+                        );
+                        qrReady = ecfResult.ready;
+                        if (qrReady) {
+                            order.set_ecf_data(
+                                ecfResult.ecf_qr_image,
+                                ecfResult.ecf_codigo_seguridad
+                            );
+                        }
+                    }
+                    if (!qrReady) {
+                        this.env.services.notification.add(
+                            _t("El e-CF fue enviado a la DGII pero el QR aún no está disponible. El recibo se imprimirá sin código QR."),
+                            { type: "warning", sticky: false }
+                        );
+                    }
+                }
+            }
+        } finally {
+            if (isFiscal) {
+                this.env.services.ui.unblock();
+            }
+        }
     },
 
+    /**
+     * Intercepta la adición de líneas de pago con método Nota de Crédito.
+     * Abre un selector o popup para elegir la NC y valida su disponibilidad.
+     */
     async addNewPaymentLine(paymentMethod) {
-        if (
-            this.pos.config.l10n_do_fiscal_journal &&
-            paymentMethod?.is_credit_note
-        ) {
-            const current_partner = this.currentOrder.get_partner();
-            let credit_note;
+        if (!this.pos.config.l10n_do_is_fiscal || !paymentMethod?.is_credit_note) {
+            return super.addNewPaymentLine(...arguments);
+        }
 
-            if (current_partner && current_partner.id !== this.pos.config.pos_partner_id?.[0]) {
-                const credit_notes = await this.pos.get_credit_notes(current_partner.id);
-                credit_note = await makeAwaitable(this.dialog, SelectionPopup, {
-                    title: _t("Select Credit Note"),
-                    list: credit_notes,
-                });
-                if (!credit_note) return;
-            } else {
-                const ncf = await makeAwaitable(this.dialog, TextInputPopup, {
-                    startingValue: "",
-                    title: _t("Please enter the NCF"),
-                    placeholder: _t("NCF"),
-                });
-                if (!ncf) return;
-                credit_note = await this.pos.get_credit_note(ncf);
-            }
+        const currentPartner = this.currentOrder.get_partner();
+        const consumerPartnerId = this.pos.config.l10n_do_default_consumer_partner_id?.[0];
+        let credit_note;
 
-            const credit_note_partner = this.pos.models["res.partner"].get(credit_note.partner_id);
+        if (currentPartner && currentPartner.id !== consumerPartnerId) {
+            const credit_notes = await this.pos.get_credit_notes(currentPartner.id);
+            credit_note = await makeAwaitable(this.dialog, SelectionPopup, {
+                title: _t("Seleccionar Nota de Crédito"),
+                list: credit_notes,
+            });
+            if (!credit_note) return false;
+        } else {
+            const ncf = await makeAwaitable(this.dialog, TextInputPopup, {
+                startingValue: "",
+                title: _t("Ingresa el NCF de la Nota de Crédito"),
+                placeholder: _t("NCF"),
+            });
+            if (!ncf) return false;
+            credit_note = await this.pos.get_credit_note(ncf);
+        }
 
-            for (const line of this.currentOrder.payment_ids) {
-                if (line.payment_method_id?.is_credit_note && line.credit_note_ncf === credit_note.ncf) {
-                    this.dialog.add(AlertDialog, {
-                        title: _t("Error"),
-                        body: _t("The credit note has already been used in this order"),
-                    });
-                    return false;
-                }
-            }
-
-            if (credit_note.residual_amount <= 0) {
+        // Verificar NC ya usada en esta orden
+        for (const line of this.currentOrder.payment_ids) {
+            if (
+                line.payment_method_id?.is_credit_note &&
+                line.credit_note_ncf === credit_note.ncf
+            ) {
                 this.dialog.add(AlertDialog, {
                     title: _t("Error"),
-                    body: sprintf(_t("Credit note %s has no available amount."), credit_note.ncf),
+                    body: _t("Esta nota de crédito ya fue aplicada a esta orden."),
                 });
                 return false;
             }
+        }
 
-            if (!credit_note_partner) {
-                this.dialog.add(AlertDialog, {
-                    title: _t("Error"),
-                    body: _t(
-                        "The customer of the credit note is not the same as the current order, please select the correct customer."
-                    ),
-                });
-                return false;
-            }
-
-            const amount_due_before_payment = this.currentOrder.get_due();
-            const newPaymentline = this.currentOrder.add_paymentline(paymentMethod);
-
-            if (newPaymentline) {
-                if (!current_partner) {
-                    this.currentOrder.set_partner(credit_note_partner);
-                }
-                newPaymentline.set_fiscal_data(credit_note.ncf, credit_note.partner_id);
-                if (credit_note.residual_amount < amount_due_before_payment) {
-                    newPaymentline.set_amount(credit_note.residual_amount);
-                }
-                this.numberBuffer.reset();
-                return true;
-            }
+        if (credit_note.residual_amount <= 0) {
+            this.dialog.add(AlertDialog, {
+                title: _t("Error"),
+                body: sprintf(_t("La nota de crédito %s no tiene saldo disponible."), credit_note.ncf),
+            });
             return false;
         }
 
-        return super.addNewPaymentLine(...arguments);
+        const credit_note_partner = this.pos.models["res.partner"].get(credit_note.partner_id);
+        if (!credit_note_partner) {
+            this.dialog.add(AlertDialog, {
+                title: _t("Error"),
+                body: _t("El cliente de la nota de crédito no está en el POS. Selecciona el cliente correcto."),
+            });
+            return false;
+        }
+
+        const due_before = this.currentOrder.get_due();
+        const newLine = this.currentOrder.add_paymentline(paymentMethod);
+        if (newLine) {
+            if (!currentPartner) {
+                this.currentOrder.set_partner(credit_note_partner);
+            }
+            newLine.set_credit_note_data(credit_note.ncf, credit_note.partner_id);
+            if (credit_note.residual_amount < due_before) {
+                newLine.set_amount(credit_note.residual_amount);
+            }
+            this.numberBuffer.reset();
+            return true;
+        }
+        return false;
     },
 
     updateSelectedPaymentline() {
         if (
-            this.selectedPaymentLine?.payment_method_id?.is_credit_note &&
-            this.pos.config.l10n_do_fiscal_journal
+            this.pos.config.l10n_do_is_fiscal &&
+            this.selectedPaymentLine?.payment_method_id?.is_credit_note
         ) {
             this.dialog.add(AlertDialog, {
                 title: _t("Error"),
-                body: _t("You cannot edit a credit note payment line"),
+                body: _t("No puedes editar una línea de pago con Nota de Crédito."),
             });
             return;
         }
         super.updateSelectedPaymentline(...arguments);
     },
 
+    /**
+     * Valida restricciones de combinación de métodos de pago según la DGII.
+     * @returns {boolean} false si hay un error de combinación
+     */
     async analyze_payment_methods() {
-        const current_order = this.currentOrder;
+        const order = this.currentOrder;
+        const total = order.get_total_with_tax();
         let total_in_bank = 0;
         let total_in_pay_later = 0;
         let has_cash = false;
-        const total = current_order.get_total_with_tax();
 
-        for (const payment_line of current_order.payment_ids) {
-            if (payment_line.payment_method_id?.type === "bank") {
-                total_in_bank = +Number(payment_line.amount);
+        for (const line of order.payment_ids) {
+            if (line.payment_method_id?.type === "bank") {
+                total_in_bank += Number(line.amount);
             }
             if (
-                payment_line.payment_method_id?.type === "pay_later" &&
-                !payment_line.payment_method_id?.is_credit_note
+                line.payment_method_id?.type === "pay_later" &&
+                !line.payment_method_id?.is_credit_note
             ) {
-                total_in_pay_later = +Number(payment_line.amount);
+                total_in_pay_later += Number(line.amount);
             }
-            if (payment_line.payment_method_id?.type === "cash") {
+            if (line.payment_method_id?.type === "cash") {
                 has_cash = true;
             }
-            if (
-                payment_line.payment_method_id?.is_credit_note &&
-                !current_order._isRefundAndSaleOrder()
-            ) {
-                if (!payment_line.credit_note_ncf) {
+            if (line.payment_method_id?.is_credit_note && !order._isRefundOrder()) {
+                if (!line.credit_note_ncf) {
                     this.dialog.add(AlertDialog, {
-                        title: _t("Error in credit note"),
-                        body: _t(
-                            "There is an error with the payment of credit note, please delete the payment of the credit note and enter it again."
-                        ),
+                        title: _t("Error en Nota de Crédito"),
+                        body: _t("Hay un error en el pago con NC. Elimina la línea y vuélvela a agregar."),
                     });
                     return false;
                 }
-
-                const credit_note = await this.pos.get_credit_note(payment_line.credit_note_ncf);
-
-                if (credit_note.residual_amount <= 0) {
+                const cn = await this.pos.get_credit_note(line.credit_note_ncf);
+                if (cn.residual_amount <= 0) {
                     this.dialog.add(AlertDialog, {
-                        title: _t("Error in credit note"),
-                        body: _t(
-                            "The credit note has no residual amount, please delete the payment of the credit note and enter it again."
-                        ),
+                        title: _t("Error en Nota de Crédito"),
+                        body: _t("La nota de crédito no tiene saldo. Elimina la línea y selecciona otra."),
                     });
                     return false;
                 }
-
-                if (credit_note.residual_amount < payment_line.amount) {
+                if (cn.residual_amount < line.amount) {
                     this.dialog.add(AlertDialog, {
-                        title: _t("Error in credit note"),
-                        body: _t(
-                            "The amount of the credit note is less than the amount entered, please delete the payment of the credit note and enter it again."
-                        ),
+                        title: _t("Error en Nota de Crédito"),
+                        body: _t("El monto de la NC es menor al monto ingresado. Ajusta o elimina la línea."),
                     });
                     return false;
                 }
             }
         }
 
-        if (
-            Math.abs(Math.round(Math.abs(total) * 100) / 100) <
-            Math.round(Math.abs(total_in_bank) * 100) / 100
-        ) {
+        const abs = (v) => Math.round(Math.abs(v) * 100) / 100;
+
+        if (abs(total) < abs(total_in_bank)) {
             this.dialog.add(AlertDialog, {
-                title: _t("Card payment"),
-                body: _t("Card payments cannot exceed the total order"),
+                title: _t("Pago con tarjeta"),
+                body: _t("El pago con tarjeta no puede exceder el total de la orden."),
             });
             return false;
         }
 
-        if (
-            Math.abs(Math.round(Math.abs(total) * 100) / 100) <
-            Math.round(Math.abs(total_in_pay_later) * 100) / 100
-        ) {
+        if (abs(total) < abs(total_in_pay_later)) {
             this.dialog.add(AlertDialog, {
-                title: _t("Pay later payment"),
-                body: _t("Pay later payment cannot exceed the total order"),
+                title: _t("Pago a crédito"),
+                body: _t("El pago a crédito no puede exceder el total de la orden."),
             });
             return false;
         }
 
-        if (
-            Math.abs(Math.round(Math.abs(total) * 100) / 100) <
-            Math.round(Math.abs(total_in_pay_later + total_in_bank) * 100) / 100
-        ) {
+        if (abs(total) < abs(total_in_pay_later + total_in_bank)) {
             this.dialog.add(AlertDialog, {
-                title: _t("Card and pay later payment"),
-                body: _t("The sum for Card and Pay Later payment cannot exceed the total order."),
+                title: _t("Tarjeta + crédito"),
+                body: _t("La suma de tarjeta y crédito no puede exceder el total de la orden."),
             });
             return false;
         }
 
-        if (
-            Math.round(Math.abs(total_in_bank) * 100) / 100 ===
-                Math.round(Math.abs(total) * 100) / 100 &&
-            has_cash
-        ) {
+        if (abs(total_in_bank) === abs(total) && has_cash) {
             this.dialog.add(AlertDialog, {
-                title: _t("Card and cash payment"),
-                body: _t(
-                    "The total payment with the card is sufficient to pay the order, please eliminate the payment in cash or reduce the amount to be paid by card"
-                ),
+                title: _t("Tarjeta + efectivo"),
+                body: _t("La tarjeta cubre el total. Elimina el efectivo o reduce el monto de tarjeta."),
             });
             return false;
         }
 
-        if (
-            Math.round(Math.abs(total_in_pay_later) * 100) / 100 ===
-                Math.round(Math.abs(total) * 100) / 100 &&
-            total_in_pay_later &&
-            has_cash
-        ) {
+        if (abs(total_in_pay_later) === abs(total) && total_in_pay_later && has_cash) {
             this.dialog.add(AlertDialog, {
-                title: _t("Pay later and cash payment"),
-                body: _t(
-                    "The total payment with the pay later is sufficient to pay the order, please eliminate the payment in cash or reduce the amount to be paid by pay later"
-                ),
+                title: _t("Crédito + efectivo"),
+                body: _t("El crédito cubre el total. Elimina el efectivo o reduce el monto a crédito."),
             });
             return false;
         }

@@ -6,9 +6,7 @@ import { PosOrder } from "@point_of_sale/app/models/pos_order";
 import { PosPayment } from "@point_of_sale/app/models/pos_payment";
 import { PosOrderline } from "@point_of_sale/app/models/pos_order_line";
 import { Orderline } from "@point_of_sale/app/generic_components/orderline/orderline";
-import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { _t } from "@web/core/l10n/translation";
-import { sprintf } from "@web/core/utils/strings";
 
 // ---------------------------------------------------------------------------
 // PosStore
@@ -16,45 +14,49 @@ import { sprintf } from "@web/core/utils/strings";
 patch(PosStore.prototype, {
     async processServerData() {
         await super.processServerData(...arguments);
-        this.fiscal_types = this.models["account.fiscal.type"]?.getAll() || [];
+        this.document_types = this.models["l10n_latam.document.type"]?.getAll() || [];
     },
 
-    get_fiscal_type_by_id(id) {
+    /** @param {number|Object} id */
+    get_doc_type_by_id(id) {
         const targetId = id && typeof id === "object" ? id.id : id;
         return (
-            this.fiscal_types.find((ft) => ft.id === targetId) ||
-            this.get_fiscal_type_by_prefix("B02")
+            this.document_types.find((dt) => dt.id === targetId) ||
+            this.get_doc_type_by_ncf_type("consumer")
         );
     },
 
-    get_fiscal_type_by_prefix(prefix) {
-        const result = this.fiscal_types.find((ft) => ft.prefix === prefix);
-        if (!result) {
-            this.dialog.add(AlertDialog, {
-                title: _t("Fiscal type not found"),
-                body: sprintf(_t("This fiscal type does not exist. (%s)"), prefix),
-            });
-            return false;
-        }
-        return result;
+    /** @param {string} prefix — e.g. "B02", "E32", "B04" */
+    get_doc_type_by_prefix(prefix) {
+        return this.document_types.find((dt) => dt.doc_code_prefix === prefix) || false;
     },
 
-    async get_fiscal_data(order) {
-        return this.data.call("pos.order", "get_next_fiscal_sequence", [
-            false,
-            order.fiscal_type?.id,
-            this.company.id,
-            [],
-            order.export_as_JSON ? order.export_as_JSON() : {},
-        ]);
+    /**
+     * Finds the first document type matching an l10n_do_ncf_type.
+     * @param {string} ncf_type — e.g. "consumer", "fiscal", "credit_note"
+     */
+    get_doc_type_by_ncf_type(ncf_type) {
+        return this.document_types.find((dt) => dt.l10n_do_ncf_type === ncf_type) || false;
+    },
+
+    /**
+     * Returns the default document type for the current order.
+     * Prefers "consumer" (B02/E32) as the safe default.
+     */
+    get_default_doc_type() {
+        return (
+            this.get_doc_type_by_ncf_type("consumer") ||
+            this.document_types[0] ||
+            false
+        );
     },
 
     isCreditNoteMode() {
-        const current_order = this.get_order();
+        const order = this.get_order();
         return (
-            this.config.l10n_do_fiscal_journal &&
-            current_order &&
-            current_order._isRefundAndSaleOrder()
+            this.config.l10n_do_is_fiscal &&
+            order &&
+            order._isRefundOrder()
         );
     },
 
@@ -64,10 +66,12 @@ patch(PosStore.prototype, {
         );
     },
 
+    /** @param {string} ncf */
     async get_credit_note(ncf) {
         return this.data.call("pos.order", "get_credit_note", [false, ncf]);
     },
 
+    /** @param {number} partner_id */
     async get_credit_notes(partner_id) {
         return this.data.call("pos.order", "get_credit_notes", [false, partner_id]);
     },
@@ -79,36 +83,41 @@ patch(PosStore.prototype, {
 patch(PosOrder.prototype, {
     setup(vals) {
         super.setup(vals);
-        this.ncf = vals.ncf || "";
-        this.ncf_origin_out = vals.ncf_origin_out || "";
-        this.ncf_expiration_date = vals.ncf_expiration_date || "";
-        this.fiscal_type_id = vals.fiscal_type_id || false;
-        this.fiscal_sequence_id = vals.fiscal_sequence_id || false;
-        this.fiscal_type = false;
+        this.l10n_latam_document_type_id = vals.l10n_latam_document_type_id || false;
+        this.l10n_do_fiscal_number = vals.l10n_do_fiscal_number || "";
+        this.l10n_do_origin_ncf = vals.l10n_do_origin_ncf || "";
+        this.l10n_do_ncf_expiration_date = vals.l10n_do_ncf_expiration_date || "";
+        this.document_type = false;
+        // e-CF fields (populated after _finalize_fiscal_order if E3x)
+        this.l10n_do_is_ecf = false;
+        this.ecf_qr_image = "";
+        this.ecf_codigo_seguridad = "";
+        this.ecf_pending = false;
 
-        if (this.config?.l10n_do_fiscal_journal) {
-            const partner = this.get_partner();
-            if (partner?.sale_fiscal_type_id) {
-                this.set_fiscal_type(
-                    this.pos.get_fiscal_type_by_id(partner.sale_fiscal_type_id)
+        if (this.config?.l10n_do_is_fiscal) {
+            if (this.l10n_latam_document_type_id) {
+                this.set_document_type(
+                    this.pos.get_doc_type_by_id(this.l10n_latam_document_type_id)
                 );
             } else {
-                this.set_fiscal_type(this.pos.get_fiscal_type_by_prefix("B02"));
+                this.set_document_type(this.pos.get_default_doc_type());
             }
         }
     },
 
-    set_fiscal_type(fiscal_type) {
-        this.fiscal_type = fiscal_type;
-        this.fiscal_type_id = fiscal_type?.id || false;
+    /**
+     * Sets the document type and applies its fiscal position to all lines.
+     * @param {Object} doc_type — l10n_latam.document.type record from PosStore
+     */
+    set_document_type(doc_type) {
+        this.document_type = doc_type;
+        this.l10n_latam_document_type_id = doc_type?.id || false;
 
-        if (fiscal_type?.fiscal_position_id) {
+        if (doc_type?.fiscal_position_id) {
             const fpId =
-                typeof fiscal_type.fiscal_position_id === "object"
-                    ? fiscal_type.fiscal_position_id.id
-                    : Array.isArray(fiscal_type.fiscal_position_id)
-                    ? fiscal_type.fiscal_position_id[0]
-                    : fiscal_type.fiscal_position_id;
+                typeof doc_type.fiscal_position_id === "object"
+                    ? doc_type.fiscal_position_id.id
+                    : doc_type.fiscal_position_id;
             const fp = this.models?.["account.fiscal.position"]?.find((p) => p.id === fpId);
             if (fp) {
                 this.update({ fiscal_position_id: fp });
@@ -119,47 +128,146 @@ patch(PosOrder.prototype, {
         }
     },
 
-    get_fiscal_type() {
-        return this.fiscal_type;
+    get_document_type() {
+        return this.document_type;
     },
 
+    /**
+     * When the partner changes, auto-select the document type based on
+     * l10n_do_dgii_tax_payer_type.
+     *
+     * Mapping:
+     *   taxpayer      → fiscal   (B01 / E31)
+     *   special       → special  (B14 / E44)
+     *   governmental  → governmental (B15 / E45)
+     *   anything else → consumer (B02 / E32)
+     */
     set_partner(partner) {
         super.set_partner(partner);
-        if (this.config?.l10n_do_fiscal_journal) {
-            if (partner?.sale_fiscal_type_id) {
-                this.set_fiscal_type(
-                    this.pos.get_fiscal_type_by_id(partner.sale_fiscal_type_id)
-                );
-            } else {
-                this.set_fiscal_type(this.pos.get_fiscal_type_by_prefix("B02"));
+        if (!this.config?.l10n_do_is_fiscal) return;
+
+        const payerTypeToNcfType = {
+            taxpayer: "fiscal",
+            special: "special",
+            governmental: "governmental",
+        };
+        const ncfType = payerTypeToNcfType[partner?.l10n_do_dgii_tax_payer_type] || "consumer";
+        this.set_document_type(
+            this.pos.get_doc_type_by_ncf_type(ncfType) || this.pos.get_default_doc_type()
+        );
+    },
+
+    /**
+     * Stores fiscal data received from backend after _finalize_fiscal_order().
+     * Also stores e-CF fields (is_ecf, ecf_qr_image, ecf_codigo_seguridad, ecf_pending).
+     * @param {Object} data — result of pos.order._finalize_fiscal_order()
+     */
+    set_l10n_do_fiscal_data(data) {
+        this.l10n_do_fiscal_number = data.l10n_do_fiscal_number || "";
+        this.l10n_do_ncf_expiration_date = data.l10n_do_ncf_expiration_date || "";
+        if (data.l10n_latam_document_type_id) {
+            const dt = this.pos.get_doc_type_by_id(data.l10n_latam_document_type_id);
+            if (dt) this.set_document_type(dt);
+        }
+        // e-CF
+        this.l10n_do_is_ecf = data.is_ecf || false;
+        this.ecf_qr_image = data.ecf_qr_image || "";
+        this.ecf_codigo_seguridad = data.ecf_codigo_seguridad || "";
+        this.ecf_pending = data.ecf_pending || false;
+    },
+
+    /**
+     * Updates e-CF QR/security data after polling. Called from PaymentScreen
+     * when poll_ecf_status() returns ready=true.
+     * @param {string} ecf_qr_image — base64 PNG
+     * @param {string} ecf_codigo_seguridad — DGII security code
+     */
+    set_ecf_data(ecf_qr_image, ecf_codigo_seguridad) {
+        this.ecf_qr_image = ecf_qr_image || "";
+        this.ecf_codigo_seguridad = ecf_codigo_seguridad || "";
+        this.ecf_pending = false;
+    },
+
+    /**
+     * Sets the origin NCF from the original order (used for B04/E34).
+     * @param {Object} origin_order — pos.order with l10n_do_fiscal_number
+     */
+    set_origin_ncf(origin_order) {
+        this.l10n_do_origin_ncf = origin_order.l10n_do_fiscal_number || "";
+    },
+
+    /**
+     * Agrega los totales fiscales DGII para el pie del recibo:
+     * subtotal sin impuestos, ITBIS agrupado por tasa, y total.
+     *
+     * Los montos se pre-formatean con la moneda de la orden para que
+     * el template XML sólo use t-esc sin lógica de formato.
+     *
+     * @returns {Object} { subtotal, itbis_groups, total }
+     *   itbis_groups: [{ label, amount }] ordenado de mayor a menor tasa
+     */
+    get_l10n_do_fiscal_totals() {
+        const fmt = (v) => {
+            try {
+                return this.pos.env.utils.formatCurrency(v);
+            } catch {
+                const sym = this.pos.currency?.symbol || "";
+                return `${sym} ${Number(v).toFixed(2)}`;
+            }
+        };
+
+        let subtotal_raw = 0;
+        const itbis_by_rate = {};
+
+        for (const line of this.get_orderlines()) {
+            const prices = line.get_all_prices?.();
+            if (!prices) continue;
+
+            subtotal_raw += prices.priceWithoutTax || 0;
+
+            for (const taxData of prices.taxesData || []) {
+                if (taxData.tax?.tax_group_id?.name !== "ITBIS") continue;
+                const rate = taxData.tax.amount ?? 0;
+                if (!itbis_by_rate[rate]) {
+                    itbis_by_rate[rate] = { rate, amount: 0 };
+                }
+                itbis_by_rate[rate].amount += taxData.tax_amount_currency || 0;
             }
         }
+
+        const itbis_groups = Object.values(itbis_by_rate)
+            .sort((a, b) => b.rate - a.rate)
+            .map((g) => ({
+                label: `ITBIS ${g.rate}%`,
+                amount: fmt(g.amount),
+            }));
+
+        return {
+            subtotal: fmt(subtotal_raw),
+            itbis_groups,
+            total: fmt(this.get_total_with_tax()),
+        };
     },
 
     export_for_printing(baseUrl, headerData) {
         const result = super.export_for_printing(baseUrl, headerData);
-        result.l10n_do_fiscal_journal = this.config?.l10n_do_fiscal_journal;
-        if (this.config?.l10n_do_fiscal_journal) {
-            result.ncf = this.ncf;
-            result.ncf_origin_out = this.ncf_origin_out;
-            result.ncf_expiration_date = this.ncf_expiration_date || "";
-            result.fiscal_type = this.fiscal_type;
+        result.l10n_do_is_fiscal = !!this.config?.l10n_do_is_fiscal;
+        if (this.config?.l10n_do_is_fiscal) {
+            result.l10n_do_fiscal_number = this.l10n_do_fiscal_number;
+            result.l10n_do_origin_ncf = this.l10n_do_origin_ncf;
+            result.l10n_do_ncf_expiration_date = this.l10n_do_ncf_expiration_date;
+            result.document_type = this.document_type;
             result.partner = this.get_partner();
+            result.l10n_do_fiscal_totals = this.get_l10n_do_fiscal_totals();
+            // e-CF
+            result.is_ecf = this.l10n_do_is_ecf;
+            result.ecf_qr_image = this.ecf_qr_image;
+            result.ecf_codigo_seguridad = this.ecf_codigo_seguridad;
         }
         return result;
     },
 
-    set_ncf_origin_out(origin_order) {
-        this.ncf_origin_out = origin_order.ncf;
-    },
-
-    set_l10n_do_fiscal_data(fiscal_data) {
-        this.ncf = fiscal_data.ncf;
-        this.ncf_expiration_date = fiscal_data.ncf_expiration_date;
-        this.fiscal_sequence_id = fiscal_data.fiscal_sequence_id;
-    },
-
-    // Alias for Odoo 18 — in Odoo 16 this was _isRefundAndSaleOrder()
+    // Compatibility alias used internally
     _isRefundAndSaleOrder() {
         return this._isRefundOrder();
     },
@@ -175,20 +283,23 @@ patch(PosPayment.prototype, {
         this.credit_note_partner_id = vals.credit_note_partner_id || false;
     },
 
-    set_fiscal_data(ncf, partner_id) {
+    /**
+     * @param {string} ncf — NCF of the credit note used as payment
+     * @param {number} partner_id — ID of the credit note's partner
+     */
+    set_credit_note_data(ncf, partner_id) {
         this.credit_note_ncf = ncf;
         this.credit_note_partner_id = partner_id;
     },
 });
 
 // ---------------------------------------------------------------------------
-// Orderline component — declare l10n_do_itbis so Owl props validation passes
+// PosOrderline — ITBIS breakdown for fiscal receipts
 // ---------------------------------------------------------------------------
+
+// Register l10n_do_itbis prop so Owl validation passes
 Orderline.props.line.shape.l10n_do_itbis = { type: Number, optional: true };
 
-// ---------------------------------------------------------------------------
-// PosOrderline
-// ---------------------------------------------------------------------------
 patch(PosOrderline.prototype, {
     getDisplayData() {
         const result = super.getDisplayData(...arguments);
@@ -196,6 +307,10 @@ patch(PosOrderline.prototype, {
         return result;
     },
 
+    /**
+     * Sums ITBIS tax amounts from taxesData for this line.
+     * Uses the tax group name "ITBIS" to identify applicable taxes.
+     */
     get_itbis() {
         let itbis = 0;
         const prices = this.get_all_prices?.();

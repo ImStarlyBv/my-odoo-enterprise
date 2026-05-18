@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data noupdate="1">
+        <!-- Partner consumidor final por defecto para ventas B02/E32 sin cliente -->
         <record model="res.partner" id="default_pos_partner" forcecreate="0">
             <field name="name">Cliente de consumo</field>
         </record>
 
-        <record model="pos.config" id="point_of_sale.pos_config_main">
-            <field name="pos_partner_id" ref="default_pos_partner"/>
-        </record>
-
+        <!-- Método de pago para Nota de Crédito dominicana -->
         <record model="pos.payment.method" id="credit_note">
             <field name="name">Nota de Crédito</field>
             <field name="split_transactions">True</field>

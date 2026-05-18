@@ -68,5 +68,7 @@ package.json
 # Archivos de planificación y documentación
 *.md
 !README.md
-!l10n_do_accounting*/*.md
-!l10n_do_accounting*/**/*.md
+!**/l10n_do_accounting*/*.md
+!**/l10n_do_accounting*/**/*.md
+!**/l10n_do_pos*/*.md
+!**/l10n_do_pos*/**/*.md

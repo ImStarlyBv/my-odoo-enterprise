@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<templates id="template" xml:space="preserve">
-    <!--
-        PartnerListScreen and PartnerDetailsEdit no longer exist in Odoo 18.
-        Partner creation/editing is handled via Odoo's standard form view dialog.
-        No template overrides are needed for this module.
-    -->
-</templates>

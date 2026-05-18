@@ -2,22 +2,32 @@ from odoo import models, fields
 
 
 class ResConfigSettings(models.TransientModel):
+    """Expone los campos fiscales RD de pos.config en la pantalla de ajustes del POS."""
     _inherit = 'res.config.settings'
 
-    l10n_do_fiscal_journal = fields.Boolean(
-        related='pos_invoice_journal_id.l10n_do_fiscal_journal'
+    l10n_do_is_fiscal = fields.Boolean(
+        related='pos_config_id.l10n_do_is_fiscal',
+        readonly=True,
     )
-    pos_partner_id = fields.Many2one(
+    l10n_do_default_consumer_partner_id = fields.Many2one(
         comodel_name='res.partner',
-        related='pos_config_id.pos_partner_id', 
+        related='pos_config_id.l10n_do_default_consumer_partner_id',
         readonly=False,
-        default=lambda self: self.env.ref('l10n_do_pos.default_pos_partner', raise_if_not_found=False),
     )
-    l10n_do_type_limit_order_history = fields.Selection(
-        related='pos_config_id.l10n_do_type_limit_order_history',
-        readonly=False
+    l10n_do_allow_vendor_ncf = fields.Boolean(
+        related='pos_config_id.l10n_do_allow_vendor_ncf',
+        readonly=False,
     )
-    l10n_do_type_limit_order_history_days = fields.Integer(
-        related='pos_config_id.l10n_do_type_limit_order_history_days',
-        readonly=False
+    l10n_do_vendor_ncf_journal_id = fields.Many2one(
+        comodel_name='account.journal',
+        related='pos_config_id.l10n_do_vendor_ncf_journal_id',
+        readonly=False,
+    )
+    l10n_do_order_history_type = fields.Selection(
+        related='pos_config_id.l10n_do_order_history_type',
+        readonly=False,
+    )
+    l10n_do_order_history_days = fields.Integer(
+        related='pos_config_id.l10n_do_order_history_days',
+        readonly=False,
     )

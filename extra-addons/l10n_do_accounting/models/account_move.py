@@ -125,62 +125,6 @@ class AccountMove(models.Model):
         "manually because a new expiration date was set on journal",
     )
 
-    # ── Campos POS: tipo fiscal y secuencia (portados de l10n_do_accounting_v2) ──
-    fiscal_type_id = fields.Many2one(
-        comodel_name="account.fiscal.type",
-        string="Fiscal Type",
-        index=True,
-    )
-    available_fiscal_type_ids = fields.Many2many(
-        comodel_name="account.fiscal.type",
-        string="Available Fiscal Types",
-        compute="_compute_available_fiscal_type",
-    )
-    fiscal_sequence_id = fields.Many2one(
-        comodel_name="account.fiscal.sequence",
-        string="Fiscal Sequence",
-        compute="_compute_fiscal_sequence",
-        store=True,
-        copy=False,
-    )
-    is_l10n_do_fiscal_invoice = fields.Boolean(
-        string="Is Fiscal Invoice",
-        compute="_compute_is_l10n_do_fiscal_invoice",
-        store=True,
-    )
-    assigned_sequence = fields.Boolean(
-        related="fiscal_type_id.assigned_sequence",
-    )
-    fiscal_sequence_status = fields.Selection(
-        selection=[
-            ("no_fiscal", "No fiscal"),
-            ("fiscal_ok", "Ok"),
-            ("almost_no_sequence", "Almost no sequence"),
-            ("no_sequence", "Depleted"),
-        ],
-        compute="_compute_fiscal_sequence_status",
-    )
-    is_debit_note = fields.Boolean(string="Is Debit Note")
-
-    # ── Aliases de compatibilidad para l10n_do_pos ────────────────────────────
-    # El v2 y l10n_do_pos usan estos nombres. Los campos canónicos (con prefijo
-    # l10n_do_) son los únicos almacenados en BD. Estos related no generan columna.
-    ncf_expiration_date = fields.Date(
-        related="l10n_do_ncf_expiration_date", store=False
-    )
-    income_type = fields.Selection(
-        related="l10n_do_income_type", store=False
-    )
-    expense_type = fields.Selection(
-        related="l10n_do_expense_type", store=False
-    )
-    annulation_type = fields.Selection(
-        related="l10n_do_cancellation_type", store=False
-    )
-    origin_out = fields.Char(
-        related="l10n_do_origin_ncf", store=False
-    )
-
     _sql_constraints = [
         (
             "unique_l10n_do_fiscal_number_sales",
@@ -326,114 +270,6 @@ class AccountMove(models.Model):
             )
 
         (self - l10n_do_internal_invoices).l10n_do_enable_first_sequence = False
-
-    @api.depends("is_l10n_do_fiscal_invoice", "move_type", "journal_id", "partner_id")
-    def _compute_available_fiscal_type(self):
-        """Tipos fiscales disponibles para la factura según su tipo de movimiento."""
-        self.available_fiscal_type_ids = False
-        for inv in self.filtered(
-            lambda x: x.journal_id and x.is_l10n_do_fiscal_invoice and x.partner_id
-        ):
-            inv.available_fiscal_type_ids = self.env["account.fiscal.type"].search(
-                inv._get_fiscal_domain()
-            )
-
-    def _get_fiscal_domain(self):
-        """Dominio para filtrar tipos fiscales compatibles con esta factura."""
-        self.ensure_one()
-        return [("type", "=", self.move_type)]
-
-    @api.depends("state", "journal_id")
-    def _compute_is_l10n_do_fiscal_invoice(self):
-        """True si el journal de la factura está marcado como fiscal dominicano."""
-        for inv in self:
-            inv.is_l10n_do_fiscal_invoice = bool(inv.journal_id.l10n_do_fiscal_journal)
-
-    @api.depends(
-        "journal_id",
-        "is_l10n_do_fiscal_invoice",
-        "state",
-        "fiscal_type_id",
-        "invoice_date",
-        "move_type",
-        "is_debit_note",
-    )
-    def _compute_fiscal_sequence(self):
-        """
-        Calcula la secuencia fiscal activa para facturas POS en borrador.
-
-        Para notas de débito, determina primero el tipo fiscal correcto según
-        el tipo de movimiento. Busca la secuencia activa con fecha de vencimiento
-        más próxima para el tipo fiscal y compañía de la factura.
-        """
-        for inv in self.filtered(lambda i: i.state == "draft"):
-            if inv.is_debit_note:
-                debit_map = {"in_invoice": "in_debit", "out_invoice": "out_debit"}
-                fiscal_type = self.env["account.fiscal.type"].search(
-                    [("type", "=", debit_map.get(inv.move_type, inv.move_type))],
-                    limit=1,
-                )
-                inv.fiscal_type_id = fiscal_type.id
-            else:
-                fiscal_type = inv.fiscal_type_id
-
-            if (
-                inv.is_l10n_do_fiscal_invoice
-                and fiscal_type
-                and fiscal_type.assigned_sequence
-            ):
-                inv.fiscal_position_id = fiscal_type.with_company(
-                    inv.company_id
-                ).fiscal_position_id
-
-                today = inv.invoice_date or fields.Date.context_today(inv)
-                domain = [
-                    ("company_id", "=", inv.company_id.id),
-                    ("fiscal_type_id", "=", fiscal_type.id),
-                    ("state", "=", "active"),
-                    ("expiration_date", ">=", today),
-                ]
-                fiscal_seq = inv.env["account.fiscal.sequence"].search(
-                    domain, order="expiration_date, id desc", limit=1
-                )
-                inv.fiscal_sequence_id = (
-                    fiscal_seq if fiscal_seq.state == "active" else False
-                )
-            else:
-                inv.fiscal_sequence_id = False
-
-    @api.depends(
-        "fiscal_sequence_id",
-        "fiscal_sequence_id.sequence_remaining",
-        "fiscal_sequence_id.remaining_percentage",
-        "state",
-        "journal_id",
-    )
-    def _compute_fiscal_sequence_status(self):
-        """
-        Estado de disponibilidad de comprobantes en la secuencia fiscal activa.
-
-        - fiscal_ok: quedan comprobantes por encima del umbral de aviso
-        - almost_no_sequence: por debajo del umbral pero aún hay comprobantes
-        - no_sequence: secuencia agotada
-        - no_fiscal: la factura no es fiscal o no tiene secuencia asignada
-        """
-        for inv in self:
-            if not inv.is_l10n_do_fiscal_invoice or not inv.fiscal_sequence_id:
-                inv.fiscal_sequence_status = "no_fiscal"
-            else:
-                fs = inv.fiscal_sequence_id
-                remaining = fs.sequence_remaining
-                seq_length = fs.sequence_end - fs.sequence_start + 1
-                remaining_pct = (
-                    round((remaining / seq_length), 2) * 100 if seq_length else 0
-                )
-                if remaining_pct > fs.remaining_percentage:
-                    inv.fiscal_sequence_status = "fiscal_ok"
-                elif remaining > 0:
-                    inv.fiscal_sequence_status = "almost_no_sequence"
-                else:
-                    inv.fiscal_sequence_status = "no_sequence"
 
     def _get_l10n_do_amounts(self):
         """
@@ -713,33 +549,6 @@ class AccountMove(models.Model):
 
     @api.onchange("partner_id")
     def _onchange_partner_id(self):
-        # Asignar tipo fiscal desde el partner para facturas fiscales POS
-        if self.is_l10n_do_fiscal_invoice and self.partner_id:
-            if self.move_type == "out_invoice" and not self.fiscal_type_id:
-                self.fiscal_type_id = self.partner_id.sale_fiscal_type_id
-            elif self.move_type == "in_invoice":
-                if self.partner_id.id == self.company_id.partner_id.id:
-                    # Compras menores: el partner debe ser la propia empresa (B13)
-                    minor_type = self.env["account.fiscal.type"].search(
-                        [("type", "=", "in_invoice"), ("prefix", "=", "B13")], limit=1
-                    )
-                    if not minor_type:
-                        raise ValidationError(
-                            _(
-                                "A fiscal type for Minor Expenses does not exist "
-                                "and you have to create one."
-                            )
-                        )
-                    self.fiscal_type_id = minor_type
-                else:
-                    self.fiscal_type_id = self.partner_id.purchase_fiscal_type_id
-            elif not self.fiscal_type_id and self.move_type in ("in_refund", "out_refund"):
-                fiscal_refund = self.env["account.fiscal.type"].search(
-                    [("type", "=", self.move_type)]
-                )
-                self.fiscal_type_id = fiscal_refund[:1]
-
-        # Lógica v1: propagar l10n_do_expense_type del partner en facturas de compra
         if (
             self.company_id.country_id == self.env.ref("base.do")
             and self.l10n_latam_document_type_id
@@ -811,21 +620,6 @@ class AccountMove(models.Model):
             )
 
     def _post(self, soft=True):
-        # Facturas POS con tipo fiscal propio (sin l10n_latam_document_type_id)
-        pos_fiscal = self.filtered(
-            lambda inv: inv.fiscal_type_id
-            and not inv.l10n_latam_document_type_id
-            and inv.is_l10n_do_fiscal_invoice
-            and inv.is_invoice()
-        )
-        for inv in pos_fiscal:
-            # Recomputar por si la secuencia se agotó mientras la factura estaba en borrador
-            inv._compute_fiscal_sequence()
-            if inv.fiscal_type_id.assigned_sequence and not inv.fiscal_sequence_id:
-                raise ValidationError(
-                    _("No active Fiscal Sequence for this type of document.")
-                )
-
         res = super()._post(soft)
 
         l10n_do_invoices = self.filtered(
@@ -844,26 +638,6 @@ class AccountMove(models.Model):
         )
         if non_payer_type_invoices:
             raise ValidationError(_("Fiscal invoices require partner fiscal type"))
-
-        # Asignar NCF desde la secuencia y propagar tipo latam (bridge) en facturas POS
-        for inv in pos_fiscal.filtered(lambda i: i.state == "posted"):
-            if (
-                not inv.ref
-                and inv.fiscal_type_id.assigned_sequence
-                and inv.fiscal_sequence_id
-            ):
-                inv.write({
-                    "ref": inv.fiscal_sequence_id.get_fiscal_number(),
-                    "l10n_do_ncf_expiration_date": inv.fiscal_sequence_id.expiration_date,
-                })
-            # Propagar l10n_latam_document_type_id desde el campo puente de fiscal_type_id
-            if (
-                inv.fiscal_type_id.l10n_latam_document_type_id
-                and not inv.l10n_latam_document_type_id
-            ):
-                inv.l10n_latam_document_type_id = (
-                    inv.fiscal_type_id.l10n_latam_document_type_id
-                )
 
         return res
 
@@ -1040,89 +814,6 @@ class AccountMove(models.Model):
         return super()._get_name_invoice_report()
 
     # TODO: handle l10n_latam_invoice_document _compute_name() inheritance shit
-
-    @api.onchange("journal_id")
-    def _onchange_journal_id(self):
-        """
-        Limpia fiscal_type_id y fiscal_sequence_id cuando el journal deja de
-        ser fiscal, evitando inconsistencias entre el tipo fiscal y el journal.
-        """
-        if not self.is_l10n_do_fiscal_invoice:
-            self.fiscal_type_id = False
-            self.fiscal_sequence_id = False
-        return super()._onchange_journal_id() if hasattr(super(), "_onchange_journal_id") else None
-
-    @api.onchange("fiscal_type_id")
-    def _onchange_fiscal_type(self):
-        """
-        Al cambiar el tipo fiscal:
-        - Compras Menores (B13): asigna la propia empresa como partner.
-        - Si el tipo fiscal tiene un journal configurado, lo aplica a la factura.
-        """
-        if self.is_l10n_do_fiscal_invoice and self.fiscal_type_id:
-            if self.fiscal_type_id.prefix == "B13":
-                self.partner_id = self.company_id.partner_id
-
-            fiscal_type_journal = self.fiscal_type_id.with_company(
-                self.company_id
-            ).journal_id
-            if fiscal_type_journal and fiscal_type_journal != self.journal_id:
-                self.journal_id = fiscal_type_journal
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        """
-        Al crear facturas POS fiscales sin tipo fiscal, lo asigna automáticamente
-        desde el tipo de venta o compra del partner correspondiente.
-        """
-        res = super().create(vals_list)
-        for move in res.filtered(
-            lambda i: i.is_l10n_do_fiscal_invoice
-            and not i.fiscal_type_id
-            and i.is_invoice()
-            and i.partner_id
-        ):
-            if move.move_type == "out_invoice":
-                move.fiscal_type_id = move.partner_id.sale_fiscal_type_id
-            elif move.move_type == "in_invoice":
-                move.fiscal_type_id = move.partner_id.purchase_fiscal_type_id
-        return res
-
-    @api.constrains("state", "invoice_line_ids", "partner_id")
-    def validate_products_export_ncf(self):
-        """
-        Valida que las facturas a clientes extranjeros usen el tipo fiscal correcto
-        según si contienen productos físicos o servicios. Ver DGII Norma 05-19, Art. 10.
-
-        - Ventas de bienes físicos a extranjeros no deben usar B17 (exterior/compras).
-        - Ventas de servicios a extranjeros no deben usar B02 (consumo).
-        """
-        for inv in self:
-            if (
-                inv.move_type == "out_invoice"
-                and inv.state in ("posted", "cancel")
-                and inv.partner_id.country_id
-                and inv.partner_id.country_id.code != "DO"
-                and inv.is_l10n_do_fiscal_invoice
-            ):
-                has_physical_products = any(
-                    p.type != "service"
-                    for p in inv.invoice_line_ids.mapped("product_id")
-                )
-                if has_physical_products and inv.fiscal_type_id.prefix == "B17":
-                    raise UserError(
-                        _(
-                            "Goods sales to overseas customers must have "
-                            "Exportaciones Fiscal Type"
-                        )
-                    )
-                elif not has_physical_products and inv.fiscal_type_id.prefix == "B02":
-                    raise UserError(
-                        _(
-                            "Service sales to overseas customers must have "
-                            "Consumo Fiscal Type"
-                        )
-                    )
 
     def unlink(self):
         if self.filtered(
