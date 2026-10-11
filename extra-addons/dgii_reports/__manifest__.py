@@ -42,6 +42,8 @@
         'wizard/dgii_report_regenerate_wizard_views.xml',
     ],
 
+    'post_init_hook': 'post_init_hook',
+
     'assets':{
         'web.assets_backend': [
             '/dgii_reports/static/src/scss/dgii_reports.scss',

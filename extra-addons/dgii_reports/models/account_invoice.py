@@ -13,12 +13,17 @@ class InvoiceServiceTypeDetail(models.Model):
     parent_code = fields.Char()
 
     _sql_constraints = [
-        ('code_unique', 'unique(code)', _('Code must be unique')),
+        ('code_unique', 'unique(code)', 'Code must be unique'),
     ]
 
 
 class AccountInvoice(models.Model):
     _inherit = 'account.move'
+
+    def _l10n_do_ncf_prefix(self):
+        """NCF / e-NCF type prefix (B01, E31, ...) of the invoice"""
+        self.ensure_one()
+        return self.l10n_latam_document_type_id.doc_code_prefix or False
 
     def _get_invoice_payment_widget(self):                    
         return self.invoice_payments_widget.get('content', []) if self.invoice_payments_widget else []
@@ -202,7 +207,7 @@ class AccountInvoice(models.Model):
             move_id = self.env['account.move'].browse(payment.get('move_id', False))
             
             if payment_id and payment_id.journal_id.type in ['cash', 'bank']:
-                payment_code = payment_id.journal_id.payment_form
+                payment_code = payment_id.journal_id.l10n_do_payment_form or payment_code
             
             # If payment is account move assume it is a credit note
             if move_id.is_invoice():
@@ -227,11 +232,10 @@ class AccountInvoice(models.Model):
             else:
                 inv.payment_form = '04'
 
-    @api.depends('fiscal_type_id')
+    @api.depends('l10n_latam_document_type_id')
     def _compute_is_exterior(self):
         for inv in self:
-            inv.is_exterior = True if inv.fiscal_type_id and \
-                inv.fiscal_type_id.prefix in ('B17', False) else False
+            inv.is_exterior = inv._l10n_do_ncf_prefix() in ('B17', 'E47')
 
     @api.onchange('service_type')
     def onchange_service_type(self):
@@ -403,11 +407,14 @@ class AccountInvoice(models.Model):
         """
         active_ids = self._context.get("active_ids")
         invoice_ids = self.browse(active_ids)
-        for k, v in self.fields_get().items():
-            if v.get("store") and v.get("depends"):
-                self.env.add_todo(self._fields[k], invoice_ids)
+        invoice_ids._dgii_recompute_fields()
 
-        self.recompute()
+    def _dgii_recompute_fields(self):
+        """Recompute the stored DGII fields defined by this module"""
+        for field in self._fields.values():
+            if field.store and field.compute and field._module == 'dgii_reports':
+                self.env.add_to_compute(field, self)
+        self.flush_recordset()
 
 class AccountMoveLine(models.Model):
     _inherit = 'account.move.line'
@@ -419,7 +426,8 @@ class AccountMoveLine(models.Model):
         for line in self:
             if line.tax_line_id and \
                 line.move_id.is_invoice() and \
-                line.move_id.is_l10n_do_fiscal_invoice:
+                line.move_id.l10n_latam_use_documents and \
+                line.move_id.country_code == 'DO':
 
                 isr_taxes = [
                     tax_line.tax_line_id.isr_retention_type 

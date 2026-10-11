@@ -7,7 +7,9 @@ from io import BytesIO
 
 import requests
 
-from odoo import models, fields, api, _, registry as odoo_registry
+from odoo import models, fields, api, _
+from odoo.modules import module as odoo_module
+from odoo.modules.registry import Registry
 from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
@@ -58,7 +60,10 @@ class AccountMove(models.Model):
             ('pending', 'Pendiente'),
             ('success', 'Validado'),
             ('error', 'Error'),
+            ('to_send', 'Pendiente de envío'),
+            ('0', 'No encontrado'),
             ('1', 'Aceptado'),
+            ('2', 'Rechazado'),
             ('3', 'En Proceso'),
             ('4', 'Aceptado Condicional'),
             ('rfce', 'RFCE (sin DGII)'),
@@ -983,8 +988,20 @@ class AccountMove(models.Model):
     # CICLO DE VIDA: CONFIRMACIÓN CON AUTO-ENVÍO ECF
     # =========================================================================
 
+    def _post(self, soft=True):
+        # Verificar secuencia NCF antes de confirmar (bloquea si está agotada, advierte si queda poco).
+        # Va en _post y no en action_post porque el POS publica sus facturas con _post directo.
+        for move in self.filtered(lambda m: m.is_ecf_invoice and m.state == 'draft'):
+            warning = move._ecf_check_sequence_limit()
+            if warning:
+                move.message_post(body=warning, message_type='comment')
+        return super()._post(soft)
+
     def action_post(self):
-        """Confirma la factura. Con ecf_auto_send activo, bloquea si el envío DGII falla.
+        """Confirma la factura. Con ecf_auto_send activo, bloquea si la API rechaza el e-CF.
+
+        Si la API no responde (timeout, caída, 5xx) la factura se publica igual y queda
+        en 'Pendiente de envío' para que el cron o el botón de reenvío la envíen después.
 
         El error se persiste en ecf_api_message usando un cursor independiente para que
         sobreviva al rollback de la transacción principal y el wizard "Ver Respuesta API"
@@ -1001,12 +1018,6 @@ class AccountMove(models.Model):
                     and move.l10n_do_currency_rate != 1.0):
                 move._check_and_update_currency_rate()
                 move._sync_move_lines_with_l10n_do_rate()
-
-        # Verificar secuencia NCF antes de confirmar (bloquea si está agotada, advierte si queda poco).
-        for move in self.filtered('is_ecf_invoice'):
-            warning = move._ecf_check_sequence_limit()
-            if warning:
-                move.message_post(body=warning, message_type='comment')
 
         # Clasificar facturas ECF según comportamiento de envío.
         ecf_auto = self.filtered(
@@ -1061,6 +1072,16 @@ class AccountMove(models.Model):
                     # UserError/ValidationError de datos salen solos y el savepoint revierte.
                     move.action_send_ecf()
 
+                    if move.ecf_validation_status == 'to_send':
+                        move.message_post(
+                            body=_(
+                                'La API e-CF no respondió. La factura quedó publicada y '
+                                'pendiente de envío a la DGII.'
+                            ),
+                            message_type='comment',
+                        )
+                        continue
+
                     if move.ecf_validation_status == 'error':
                         # Error de red o rechazo de la API, capturado internamente.
                         send_errors[move.id] = {
@@ -1084,7 +1105,11 @@ class AccountMove(models.Model):
                 # Persistir el error con cursor independiente: este commit ocurre
                 # antes del raise, por lo que sobrevive al rollback de la transacción principal.
                 try:
-                    with odoo_registry(self.env.cr.dbname).cursor() as cr2:
+                    with Registry(self.env.cr.dbname).cursor() as cr2:
+                        # Si la transacción principal ya tiene bloqueada la factura (p. ej. la
+                        # sincronización de tasa en moneda extranjera la escribe antes del
+                        # savepoint), este UPDATE esperaría para siempre a su propia petición.
+                        cr2.execute("SET LOCAL lock_timeout = '3s'")
                         env2 = self.env(cr=cr2)
                         for move_id, info in send_errors.items():
                             env2['account.move'].browse(move_id).write({
@@ -1157,14 +1182,20 @@ class AccountMove(models.Model):
             "ECF: enviando E%s → %s/api/factura/generar-comprobante | factura: %s",
             doc_type, api_url, self.name,
         )
+        # Parámetro del sistema para entornos de prueba con certificado vencido o autofirmado.
+        verify_ssl = self.env['ir.config_parameter'].sudo().get_param(
+            'l10n_do_electronic_invoice.ecf_verify_ssl', 'True'
+        ).strip().lower() not in ('false', '0', 'no')
+        if not verify_ssl:
+            _logger.warning("ECF: verificación SSL desactivada por parámetro del sistema")
         try:
             response = requests.post(
                 f'{api_url}/api/factura/generar-comprobante',
                 json=payload,
                 headers={'Authorization': f'Bearer {api_key}'},
                 timeout=30,
+                verify=verify_ssl,
             )
-            data = response.json()
         except requests.exceptions.Timeout:
             _logger.warning(
                 "ECF: timeout (30s) conectando con la API | factura=%s url=%s",
@@ -1172,32 +1203,48 @@ class AccountMove(models.Model):
             )
             self.write({
                 'ecf_api_message': 'Timeout: la API no respondió en 30 segundos.',
-                'ecf_validation_status': 'error',
+                'ecf_validation_status': 'to_send',
             })
             return
-        except requests.exceptions.ConnectionError as e:
+        except requests.exceptions.RequestException as e:
             _logger.warning(
                 "ECF: error de conexión con la API | factura=%s error=%s",
                 self.name, str(e),
             )
             self.write({
                 'ecf_api_message': 'Error de conexión: %s' % str(e),
-                'ecf_validation_status': 'error',
-            })
-            return
-        except Exception as e:
-            _logger.exception("ECF: error inesperado en la llamada HTTP | factura=%s", self.name)
-            self.write({
-                'ecf_api_message': str(e),
-                'ecf_validation_status': 'error',
+                'ecf_validation_status': 'to_send',
             })
             return
 
         _logger.info("ECF: respuesta HTTP %s | factura=%s", response.status_code, self.name)
 
+        if response.status_code >= 500 or response.status_code in (401, 403):
+            # API caída, fallo interno o credenciales inválidas: no es un rechazo del
+            # comprobante, así que queda en cola hasta que se corrija.
+            self.write({
+                'ecf_api_message': 'La API respondió HTTP %s: %s' % (
+                    response.status_code, (response.text or '')[:500]),
+                'ecf_validation_status': 'to_send',
+            })
+            return
+
+        try:
+            data = response.json()
+        except ValueError:
+            _logger.warning("ECF: respuesta no JSON de la API | factura=%s", self.name)
+            self.write({
+                'ecf_api_message': (response.text or '')[:500] or 'Respuesta vacía de la API.',
+                'ecf_validation_status': 'error',
+            })
+            return
+
         if response.ok:
             qr_url = data.get('qrUrl') or ''
-            estado = data.get('estado') or 'rfce'
+            estado = str(data.get('estado') or 'rfce')
+            if estado not in dict(self._fields['ecf_validation_status'].selection):
+                _logger.warning("ECF: estado desconocido %r | factura=%s", estado, self.name)
+                estado = 'error'
             _logger.info(
                 "ECF: éxito | trackId=%s estado=%s | factura=%s",
                 data.get('trackId'), estado, self.name,
@@ -1212,7 +1259,7 @@ class AccountMove(models.Model):
             if qr_url:
                 self._ecf_generate_qr_image()
         else:
-            error_msg = data.get('error', str(data))
+            error_msg = data.get('error', str(data)) if isinstance(data, dict) else str(data)
             _logger.warning(
                 "ECF: rechazado por la API | HTTP %s error=%r | factura=%s",
                 response.status_code, error_msg, self.name,
@@ -1221,6 +1268,29 @@ class AccountMove(models.Model):
                 'ecf_api_message': error_msg,
                 'ecf_validation_status': 'error',
             })
+
+    @api.model
+    def _cron_ecf_send_pending(self, limit=20):
+        """Reenvía a la API las facturas e-CF publicadas que quedaron pendientes de envío."""
+        moves = self.search([
+            ('state', '=', 'posted'),
+            ('is_ecf_invoice', '=', True),
+            ('ecf_validation_status', '=', 'to_send'),
+        ], order='id', limit=limit)
+        for move in moves:
+            try:
+                with self.env.cr.savepoint():
+                    move.with_company(move.company_id).action_send_ecf()
+            except Exception:
+                _logger.exception("ECF cron: no se pudo reenviar %s", move.name)
+                continue
+            if not odoo_module.current_test:
+                # Cada envío es irreversible en la API: se confirma uno por uno.
+                self.env.cr.commit()
+            if move.ecf_validation_status == 'to_send':
+                # La API sigue sin responder: no esperar 30 s por cada factura restante.
+                _logger.info("ECF cron: la API sigue sin responder, se reintenta en la próxima ejecución")
+                break
 
     def action_resend_dgii(self):
         """Reenvía la factura publicada a la DGII sin necesidad de cancelar ni re-confirmar."""
@@ -1231,6 +1301,9 @@ class AccountMove(models.Model):
             raise ValidationError(_('Solo aplica para facturas electrónicas (e-CF).'))
         if not self.company_id.l10n_do_enable_resend_button:
             raise ValidationError(_('El reenvío manual no está habilitado para esta empresa.'))
+        if self.ecf_validation_status not in ('error', 'to_send', 'pending'):
+            # Reenviar un e-CF ya recibido por la API lo volvería a firmar.
+            raise ValidationError(_('Este e-CF ya fue enviado; no se puede reenviar.'))
         _logger.info(
             "ECF: reenvío manual iniciado | factura=%s estado_previo=%s",
             self.name, self.ecf_validation_status,

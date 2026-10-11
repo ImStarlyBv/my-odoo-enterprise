@@ -1,6 +1,6 @@
 {
     'name': 'Facturación Electrónica e-CF (DGII)',
-    'version': '18.0.1.0.0',
+    'version': '18.0.1.1.0',
     'summary': 'Generador del payload JSON para e-CF de la DGII - República Dominicana',
     'category': 'Accounting/Localizations',
     'author': 'Omar Bautista',
@@ -18,6 +18,7 @@
         'views/account_move_views.xml',
         'views/res_partner_views.xml',
         'data/l10n_do.municipality.csv',
+        'data/ir_cron.xml',
     ],
     'installable': True,
     'application': False,

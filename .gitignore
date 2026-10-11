@@ -72,3 +72,8 @@ package.json
 !**/l10n_do_accounting*/**/*.md
 !**/l10n_do_pos*/*.md
 !**/l10n_do_pos*/**/*.md
+
+# Re-ignorar compilados de Python: la excepción '!extra-addons/**' de arriba
+# los volvía a incluir. Debe ir DESPUÉS de esa excepción para tener efecto.
+__pycache__/
+*.py[co]

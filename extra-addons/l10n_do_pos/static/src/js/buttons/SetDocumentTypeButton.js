@@ -73,6 +73,7 @@ export class SetDocumentTypeButton extends Component {
         }
 
         this.currentOrder.set_document_type(selected);
+        this.currentOrder.apply_default_consumer_partner_if_needed();
     }
 
     /**

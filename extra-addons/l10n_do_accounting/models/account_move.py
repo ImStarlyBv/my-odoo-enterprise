@@ -520,15 +520,9 @@ class AccountMove(models.Model):
             domain.append(("code", "in", codes))
         return domain
 
-    @api.constrains("move_type", "l10n_latam_document_type_id")
-    def _check_invoice_type_document_type(self):
-        l10n_do_invoices = self.filtered(
-            lambda inv: inv.country_code == "DO"
-            and inv.l10n_latam_use_documents
-            and inv.l10n_latam_document_type_id
-            and inv.state == "posted"
-        )
-        for rec in l10n_do_invoices:
+    def _l10n_do_check_vat_required(self):
+        """Raise if a posted fiscal invoice lacks the partner VAT required by DGII."""
+        for rec in self:
             has_vat = bool(rec.partner_id.vat and bool(rec.partner_id.vat.strip()))
             l10n_latam_document_type = rec.l10n_latam_document_type_id
             if not has_vat and (
@@ -545,6 +539,34 @@ class AccountMove(models.Model):
                         "Please set the current VAT of this client"
                     )
                 )
+
+    def _l10n_do_get_note_line_account(self):
+        """Account used on Credit/Debit Note lines created from the wizards."""
+        self.ensure_one()
+        product_lines = self.invoice_line_ids.filtered(
+            lambda line: line.display_type == "product" and line.account_id
+        )
+        if product_lines:
+            return product_lines[0].account_id
+        if self.journal_id.default_account_id:
+            return self.journal_id.default_account_id
+        field_name = (
+            "property_account_income_categ_id"
+            if self.is_sale_document(include_receipts=True)
+            else "property_account_expense_categ_id"
+        )
+        categ = self.env["product.category"].with_company(self.company_id)
+        return categ._fields[field_name].get_company_dependent_fallback(categ)
+
+    @api.constrains("move_type", "l10n_latam_document_type_id")
+    def _check_invoice_type_document_type(self):
+        l10n_do_invoices = self.filtered(
+            lambda inv: inv.country_code == "DO"
+            and inv.l10n_latam_use_documents
+            and inv.l10n_latam_document_type_id
+            and inv.state == "posted"
+        )
+        l10n_do_invoices._l10n_do_check_vat_required()
         super(AccountMove, self - l10n_do_invoices)._check_invoice_type_document_type()
 
     @api.onchange("partner_id")
@@ -639,6 +661,10 @@ class AccountMove(models.Model):
         )
         if non_payer_type_invoices:
             raise ValidationError(_("Fiscal invoices require partner fiscal type"))
+
+        l10n_do_invoices.filtered(
+            lambda inv: inv.l10n_latam_document_type_id and inv.is_sale_document()
+        )._l10n_do_check_vat_required()
 
         return res
 

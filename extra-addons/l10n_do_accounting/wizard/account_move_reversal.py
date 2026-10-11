@@ -107,6 +107,15 @@ class AccountMoveReversal(models.TransientModel):
                     if self.l10n_do_refund_type == "fixed_amount"
                     else move.amount_untaxed * (self.l10n_do_percentage / 100)
                 )
+                account = move._l10n_do_get_note_line_account()
+                if not account:
+                    raise UserError(
+                        _("Set a default account on journal %s to issue partial refunds.")
+                        % move.journal_id.display_name
+                    )
+                origin_lines = move.invoice_line_ids.filtered(
+                    lambda line: line.display_type == "product"
+                )
                 result["invoice_line_ids"] = [
                     (
                         0,
@@ -115,6 +124,8 @@ class AccountMoveReversal(models.TransientModel):
                             "name": self.reason or _("Credit"),
                             "price_unit": price_unit,
                             "quantity": 1,
+                            "account_id": account.id,
+                            "tax_ids": [(6, 0, origin_lines[:1].tax_ids.ids)],
                         },
                     )
                 ]

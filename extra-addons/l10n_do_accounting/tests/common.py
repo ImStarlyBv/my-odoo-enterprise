@@ -4,16 +4,24 @@ from odoo.addons.account.tests.common import AccountTestInvoicingCommon
 
 class L10nDOTestsCommon(AccountTestInvoicingCommon):
     @classmethod
-    def setUpClass(cls, chart_template_ref="do"):
-        super(L10nDOTestsCommon, cls).setUpClass(chart_template_ref=chart_template_ref)
+    def _create_company(cls, **create_values):
+        # Fiscal journals cannot be created for a dominican company without VAT
+        create_values.setdefault("vat", "131793916")
+        return super()._create_company(**create_values)
 
-        cls.do_company = cls.setup_company_data(
-            "INDEXA SRL",
-            chart_template=chart_template_ref,
-            vat="131793916",
-            street="dummy address",
-            country_id=cls.env.ref("base.do").id,
-        )["company"]
+    @classmethod
+    @AccountTestInvoicingCommon.setup_country("do")
+    def setUpClass(cls):
+        super().setUpClass()
+
+        cls.do_company = cls.company_data["company"]
+        cls.do_company.write(
+            {
+                "name": "INDEXA SRL",
+                "vat": "131793916",
+                "street": "dummy address",
+            }
+        )
 
         # multi-currency variables
         cls.usd_currency = cls.env.ref("base.USD")

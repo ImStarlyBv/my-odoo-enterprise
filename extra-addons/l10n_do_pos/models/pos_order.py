@@ -106,7 +106,7 @@ class PosOrder(models.Model):
             self.write({'to_invoice': True})
         return super()._process_saved_order(draft)
 
-    def _finalize_fiscal_order(self):
+    def finalize_fiscal_order(self):
         """
         Crea la factura sincrónicamente y lee el NCF asignado por la secuencia.
         Si el NCF es e-CF (prefijo E) y `l10n_do_ecf_auto_send` está activo,
@@ -118,16 +118,16 @@ class PosOrder(models.Model):
 
         :return: dict con l10n_do_fiscal_number, l10n_do_ncf_expiration_date,
                  l10n_latam_document_type_id, is_ecf, ecf_qr_image,
-                 ecf_codigo_seguridad, ecf_pending
+                 ecf_codigo_seguridad, ecf_pending, ecf_error
         """
         self.ensure_one()
 
         # Si la factura ya existe (creada por _process_saved_order), no recrear
-        if not self.account_move_ids:
+        if not self.account_move:
             self.write({'to_invoice': True})
             self._generate_pos_order_invoice()
 
-        invoice = self.account_move_ids[:1]
+        invoice = self.account_move
 
         if invoice and invoice.l10n_do_fiscal_number:
             self.write({
@@ -142,6 +142,8 @@ class PosOrder(models.Model):
 
         # Enviar e-CF si el módulo está instalado y el auto-envío está activo
         ecf_pending = False
+        ecf_error = False
+        ecf_queued = False
         if (
             ecf_data['is_ecf']
             and self.config_id.l10n_do_ecf_auto_send
@@ -152,9 +154,22 @@ class PosOrder(models.Model):
             invoice.action_send_ecf()
             # Re-leer los datos eCF después del envío
             ecf_data = self._read_ecf_data(invoice)
-            ecf_pending = not ecf_data['ecf_qr_image']
+            ecf_status = getattr(invoice, 'ecf_validation_status', False)
+            if ecf_status == 'to_send':
+                # La API no respondió: la factura queda publicada y se envía después.
+                ecf_queued = True
+            elif ecf_status == 'error':
+                # Rechazo o fallo de red: el polling no va a traer el QR.
+                ecf_error = (
+                    getattr(invoice, 'ecf_api_message', False)
+                    or _('El envío del e-CF a la DGII falló.')
+                )
+            else:
+                ecf_pending = not ecf_data['ecf_qr_image']
 
         return {
+            'ecf_error': ecf_error,
+            'ecf_queued': ecf_queued,
             'l10n_do_fiscal_number': self.l10n_do_fiscal_number,
             'l10n_do_ncf_expiration_date': (
                 str(self.l10n_do_ncf_expiration_date)
@@ -181,7 +196,7 @@ class PosOrder(models.Model):
         :return: dict {ready, ecf_qr_image, ecf_codigo_seguridad}
         """
         order = self.browse(order_id)
-        invoice = order.account_move_ids[:1]
+        invoice = order.account_move
         if not invoice:
             return {'ready': False, 'ecf_qr_image': False, 'ecf_codigo_seguridad': False}
 
@@ -200,7 +215,7 @@ class PosOrder(models.Model):
         :return: dict con ecf_qr_image, ecf_codigo_seguridad, is_ecf
         """
         order = self.browse(order_id)
-        invoice = order.account_move_ids[:1]
+        invoice = order.account_move
         if not invoice:
             return {'is_ecf': False, 'ecf_qr_image': False, 'ecf_codigo_seguridad': False}
         return order._read_ecf_data(invoice)

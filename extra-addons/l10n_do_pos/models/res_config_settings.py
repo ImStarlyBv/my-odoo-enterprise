@@ -14,6 +14,18 @@ class ResConfigSettings(models.TransientModel):
         related='pos_config_id.l10n_do_default_consumer_partner_id',
         readonly=False,
     )
+    l10n_do_available_document_type_ids = fields.Many2many(
+        related='pos_config_id.l10n_do_available_document_type_ids',
+    )
+    l10n_do_default_document_type_id = fields.Many2one(
+        comodel_name='l10n_latam.document.type',
+        related='pos_config_id.l10n_do_default_document_type_id',
+        readonly=False,
+    )
+    l10n_do_prefer_ecf = fields.Boolean(
+        related='pos_config_id.l10n_do_prefer_ecf',
+        readonly=False,
+    )
     l10n_do_allow_vendor_ncf = fields.Boolean(
         related='pos_config_id.l10n_do_allow_vendor_ncf',
         readonly=False,

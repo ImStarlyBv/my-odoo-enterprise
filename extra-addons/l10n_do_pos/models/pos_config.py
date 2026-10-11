@@ -60,6 +60,55 @@ class PosConfig(models.Model):
         ),
     )
 
+    l10n_do_available_document_type_ids = fields.Many2many(
+        comodel_name='l10n_latam.document.type',
+        string='Comprobantes disponibles',
+        compute='_compute_l10n_do_available_document_type_ids',
+        help='Tipos de comprobante de venta configurados en el diario de facturación.',
+    )
+    l10n_do_default_document_type_id = fields.Many2one(
+        comodel_name='l10n_latam.document.type',
+        string='Comprobante por defecto',
+        domain="[('id', 'in', l10n_do_available_document_type_ids)]",
+        help=(
+            'Tipo de comprobante con el que inicia cada orden (p. ej. E32 o B02). '
+            'Si se deja vacío se usa Consumo (B02).'
+        ),
+    )
+    l10n_do_prefer_ecf = fields.Boolean(
+        string='Preferir e-CF',
+        default=False,
+        help=(
+            'Al seleccionar un cliente, usa el comprobante electrónico '
+            'equivalente (E31, E44, E45) en lugar del NCF tradicional '
+            '(B01, B14, B15) cuando el diario lo tenga configurado.'
+        ),
+    )
+
+    @api.depends('invoice_journal_id.l10n_do_document_type_ids')
+    def _compute_l10n_do_available_document_type_ids(self):
+        for config in self:
+            config.l10n_do_available_document_type_ids = (
+                config.invoice_journal_id.l10n_do_document_type_ids
+                .mapped('l10n_latam_document_type_id')
+                .filtered(lambda dt: dt.internal_type == 'invoice')
+            )
+
+    @api.constrains('l10n_do_default_document_type_id', 'invoice_journal_id')
+    def _check_l10n_do_default_document_type(self):
+        """El comprobante por defecto debe estar configurado en el diario de la caja."""
+        for rec in self:
+            doc_type = rec.l10n_do_default_document_type_id
+            if doc_type and doc_type not in rec.l10n_do_available_document_type_ids:
+                raise ValidationError(_(
+                    'El comprobante por defecto "%(doc)s" no está configurado en '
+                    'el diario de facturación "%(journal)s" de la caja "%(pos)s".'
+                ) % {
+                    'doc': doc_type.name,
+                    'journal': rec.invoice_journal_id.name or '',
+                    'pos': rec.name,
+                })
+
     @api.depends('invoice_journal_id.l10n_do_document_type_ids')
     def _compute_l10n_do_is_fiscal(self):
         """Un POS es fiscal cuando su diario tiene tipos de documento dominicanos."""

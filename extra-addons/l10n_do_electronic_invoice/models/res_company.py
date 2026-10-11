@@ -90,7 +90,6 @@ class ResCompany(models.Model):
     )
     ecf_api_key = fields.Char(
         string="API Key (Bearer Token)",
-        password=True,
         help="Token de autenticación emitido por api.ecf-software.online. Se emite una sola vez.",
     )
     ecf_auto_send = fields.Boolean(

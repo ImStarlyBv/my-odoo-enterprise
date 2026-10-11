@@ -13,19 +13,19 @@ class AccountMove(models.Model):
     )
     
     def check_pos_session(self):
-        for move in self:
-            # Check if the move is an invoice and linked to a POS session
-            if move.move_type in ('out_invoice', 'out_refund'):
-                pos_orders = self.env['pos.order'].search([('account_move_ids', 'in', [move.id])])
-                if pos_orders:
-                    # Filter sessions that are open
-                    open_sessions = pos_orders.mapped('session_id').filtered(lambda s: s.state == 'opened')
-                    if open_sessions:
-                        session_names = ', '.join(open_sessions.mapped('name'))
-                        raise UserError(_(
-                            "This invoice is linked to an open POS session (%s), you cannot modify it, "
-                            "please make a credit note or close the session." % session_names
-                        ))
+        # Check if the moves are invoices linked to a POS session
+        invoices = self.filtered(lambda m: m.move_type in ('out_invoice', 'out_refund'))
+        if not invoices:
+            return
+        pos_orders = self.env['pos.order'].sudo().search([('account_move', 'in', invoices.ids)])
+        # Filter sessions that are open
+        open_sessions = pos_orders.mapped('session_id').filtered(lambda s: s.state == 'opened')
+        if open_sessions:
+            session_names = ', '.join(open_sessions.mapped('name'))
+            raise UserError(_(
+                "This invoice is linked to an open POS session (%s), you cannot modify it, "
+                "please make a credit note or close the session."
+            ) % session_names)
 
     def button_cancel(self):
         self.check_pos_session()

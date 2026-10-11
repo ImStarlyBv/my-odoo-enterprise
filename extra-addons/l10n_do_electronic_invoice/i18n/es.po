@@ -1,0 +1,221 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 18.0-20260513\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-11 19:03+0000\n"
+"PO-Revision-Date: 2026-10-11 19:03+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "01 - Personal"
+msgstr "01 - Gastos de Personal"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "02 - Work, Supplies and Services"
+msgstr "02 - Gastos por Trabajo, Suministros y Servicio"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "03 - Leasing"
+msgstr "03 - Arrendamientos"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "04 - Fixed Assets"
+msgstr "04 - Gastos de Activos Fijos"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "05 - Representation"
+msgstr "05 - Gastos de Representación"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "06 - Admitted Deductions"
+msgstr "06 - Otras Deducciones Admitidas"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "07 - Financial Expenses"
+msgstr "07 - Gastos Financieros"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "08 - Extraordinary Expenses"
+msgstr "08 - Gastos Extraordinarios"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "09 - Cost & Expenses part of Sales"
+msgstr "09 - Compras y Gastos que forman parte del Costo de Venta"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "10 - Assets Acquisitions"
+msgstr "10 - Adquisiciones de Activos"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "11 - Insurance Expenses"
+msgstr "11 - Gastos de Seguros"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model,name:l10n_do_electronic_invoice.model_res_company
+msgid "Companies"
+msgstr "Compañías"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_doc_type_config__company_id
+msgid "Company"
+msgstr "Compañía"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model,name:l10n_do_electronic_invoice.model_res_partner
+msgid "Contact"
+msgstr "Contacto"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model,name:l10n_do_electronic_invoice.model_res_country_state
+msgid "Country state"
+msgstr "Provincia"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_doc_type_config__create_uid
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_error_wizard__create_uid
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_preview_wizard__create_uid
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_municipality__create_uid
+msgid "Created by"
+msgstr "Creado por"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_doc_type_config__create_date
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_error_wizard__create_date
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_preview_wizard__create_date
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_municipality__create_date
+msgid "Created on"
+msgstr "Creado el"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_res_company__l10n_do_default_client
+msgid "Default Client Type"
+msgstr "Tipo de cliente por defecto"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,help:l10n_do_electronic_invoice.field_res_company__l10n_do_default_client
+msgid "Default taxpayer type for clients with 11-digit VAT (Cédula)."
+msgstr ""
+"Tipo de contribuyente por defecto para clientes con identificación de 11 "
+"dígitos (Cédula)."
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_doc_type_config__display_name
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_error_wizard__display_name
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_preview_wizard__display_name
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_municipality__display_name
+msgid "Display Name"
+msgstr "Nombre mostrado"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_account_bank_statement_line__ecf_is_exhausted
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_account_move__ecf_is_exhausted
+msgid "Ecf Is Exhausted"
+msgstr "e-CF agotado"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields.selection,name:l10n_do_electronic_invoice.selection__account_move__ecf_validation_status__error
+msgid "Error"
+msgstr "Error"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_doc_type_config__id
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_error_wizard__id
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_preview_wizard__id
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_municipality__id
+msgid "ID"
+msgstr "Identificación"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,help:l10n_do_electronic_invoice.field_res_company__vat
+msgid "Identification Number for selected type"
+msgstr "Número de identificación para el tipo seleccionado"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model,name:l10n_do_electronic_invoice.model_account_move
+msgid "Journal Entry"
+msgstr "Asiento contable"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_doc_type_config__write_uid
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_error_wizard__write_uid
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_preview_wizard__write_uid
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_municipality__write_uid
+msgid "Last Updated by"
+msgstr "Última actualización de"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_doc_type_config__write_date
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_error_wizard__write_date
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_preview_wizard__write_date
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_municipality__write_date
+msgid "Last Updated on"
+msgstr "Última actualización en"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model,name:l10n_do_electronic_invoice.model_l10n_latam_document_type
+msgid "Latam Document Type"
+msgstr "Tipo de Comprobante"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields,field_description:l10n_do_electronic_invoice.field_l10n_do_ecf_error_wizard__move_id
+msgid "Move"
+msgstr "Asiento"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model.fields.selection,name:l10n_do_electronic_invoice.selection__account_move__l10n_do_payment_type__7
+msgid "Nota de Crédito"
+msgstr "Nota de crédito"
+
+#. module: l10n_do_electronic_invoice
+#: model:ir.model,name:l10n_do_electronic_invoice.model_product_template
+msgid "Product"
+msgstr "Producto"
+
+#. module: l10n_do_electronic_invoice
+#. odoo-python
+#: code:addons/extra-addons/l10n_do_electronic_invoice/models/res.partner.py:0
+#: code:addons/l10n_do_electronic_invoice/models/res.partner.py:0
+msgid "You are not allowed to modify %s after partner fiscal document issuing"
+msgstr ""
+"No tiene permiso de modificar los campos %s luego de la emisión de un "
+"documento fiscal de este contacto"

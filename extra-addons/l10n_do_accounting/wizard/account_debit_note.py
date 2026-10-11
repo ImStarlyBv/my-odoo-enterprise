@@ -93,7 +93,9 @@ class AccountDebitNote(models.TransientModel):
 
         # Setting default account
         journal = move_ids[0].journal_id
-        res["l10n_do_account_id"] = journal.default_account_id.id
+        res["l10n_do_account_id"] = (
+            journal.default_account_id or move_ids[0]._l10n_do_get_note_line_account()
+        ).id
         res["l10n_latam_use_documents"] = journal.l10n_latam_use_documents
 
         # Do not allow Debit Notes if Comprobante de Compra or Gastos Menores
@@ -195,6 +197,12 @@ class AccountDebitNote(models.TransientModel):
                 if self.l10n_do_debit_type == "fixed_amount"
                 else origin_invoice_id.amount_untaxed * (self.l10n_do_percentage / 100)
             )
+            account = self.l10n_do_account_id or move._l10n_do_get_note_line_account()
+            if not account:
+                raise UserError(
+                    _("Set a default account on journal %s to issue Debit Notes.")
+                    % move.journal_id.display_name
+                )
             res["invoice_line_ids"] = [
                 (
                     0,
@@ -203,6 +211,7 @@ class AccountDebitNote(models.TransientModel):
                         "name": self.reason or _("Debit"),
                         "price_unit": price_unit,
                         "quantity": 1,
+                        "account_id": account.id,
                         "tax_ids": taxes,
                     },
                 )

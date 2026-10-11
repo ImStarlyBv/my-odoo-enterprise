@@ -1,5 +1,6 @@
 /** @odoo-module */
 
+import { onMounted } from "@odoo/owl";
 import { patch } from "@web/core/utils/patch";
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
@@ -14,6 +15,17 @@ import { sprintf } from "@web/core/utils/strings";
 PaymentScreen.components = { ...PaymentScreen.components, SetDocumentTypeButton, VendorNcfButton };
 
 patch(PaymentScreen.prototype, {
+    setup() {
+        super.setup(...arguments);
+        // Con comprobante de consumo (B02/E32) por defecto, mostrar el cliente
+        // consumidor de la caja al entrar a la pantalla de pago.
+        onMounted(() => {
+            if (this.pos.config.l10n_do_is_fiscal) {
+                this.currentOrder?.apply_default_consumer_partner_if_needed();
+            }
+        });
+    },
+
     /**
      * Validaciones DGII antes de procesar el pago.
      * Orden de validaciones según normativa:
@@ -182,7 +194,7 @@ patch(PaymentScreen.prototype, {
      * Owl re-renderiza el recibo reactivamente con los datos disponibles.
      */
     async _finalizeValidation() {
-        const order = this.currentOrder;
+        const orderUuid = this.currentOrder?.uuid;
         const isFiscal = this.pos.config.l10n_do_is_fiscal;
 
         if (isFiscal) {
@@ -192,16 +204,42 @@ patch(PaymentScreen.prototype, {
         try {
             await super._finalizeValidation(...arguments);
 
-            if (isFiscal && order.id && !order.l10n_do_fiscal_number) {
+            // After sync, the local order's id may have been replaced by the
+            // backend numeric id. Look up the synced record by uuid to be safe.
+            const order =
+                this.pos.models["pos.order"].find((o) => o.uuid === orderUuid) ||
+                this.currentOrder;
+
+            if (
+                isFiscal &&
+                order &&
+                typeof order.id === "number" &&
+                !order.l10n_do_fiscal_number
+            ) {
                 const data = await this.pos.data.call(
                     "pos.order",
-                    "_finalize_fiscal_order",
+                    "finalize_fiscal_order",
                     [order.id]
                 );
                 order.set_l10n_do_fiscal_data(data);
 
+                if (data.ecf_error) {
+                    this.env.services.notification.add(
+                        _t("La factura se creó pero el e-CF no fue aceptado: ") +
+                            data.ecf_error,
+                        { type: "danger", sticky: true }
+                    );
+                }
+
+                if (data.ecf_queued) {
+                    this.env.services.notification.add(
+                        _t("La factura se creó. El e-CF quedó pendiente de envío a la DGII; el recibo se imprimirá sin código QR."),
+                        { type: "warning", sticky: false }
+                    );
+                }
+
                 // Polling e-CF: si el QR no llegó aún, reintentar hasta 3 veces
-                if (data.is_ecf && data.ecf_pending) {
+                if (data.is_ecf && data.ecf_pending && !data.ecf_queued) {
                     let qrReady = false;
                     for (let attempt = 0; attempt < 3 && !qrReady; attempt++) {
                         await new Promise((resolve) => setTimeout(resolve, 2000));

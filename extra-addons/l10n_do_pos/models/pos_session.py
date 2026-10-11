@@ -34,6 +34,8 @@ class PosSession(models.Model):
             data.update({
                 'payment_method_to_receivable_lines': {},
                 'payment_to_receivable_lines': {},
+                # pos_online_payment la recorre en _reconcile_account_move_lines
+                'online_payment_to_receivable_lines': {},
             })
             return data
         return super()._create_bank_payment_moves(data)

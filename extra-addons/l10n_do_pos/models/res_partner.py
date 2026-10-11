@@ -1,5 +1,6 @@
 from odoo import api, models, _
 from odoo.exceptions import UserError
+from odoo.osv.expression import OR
 
 
 class ResPartner(models.Model):
@@ -8,6 +9,16 @@ class ResPartner(models.Model):
     y protege al partner consumidor por defecto de ser eliminado.
     """
     _inherit = 'res.partner'
+
+    @api.model
+    def _load_pos_data_domain(self, data):
+        """Garantiza que el cliente consumidor por defecto se cargue en el POS."""
+        domain = super()._load_pos_data_domain(data)
+        config = self.env['pos.config'].browse(data['pos.config']['data'][0]['id'])
+        consumer = config.l10n_do_default_consumer_partner_id
+        if consumer:
+            domain = OR([domain, [('id', '=', consumer.id)]])
+        return domain
 
     @api.model
     def _load_pos_data_fields(self, config_id):

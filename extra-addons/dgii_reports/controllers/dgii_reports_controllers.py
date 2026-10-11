@@ -13,9 +13,9 @@ class DgiiReportsControllers(Controller):
         env = request.env
         base_url = env['ir.config_parameter'].sudo().get_param('web.base.url')
 
-        if str(ncf_rnc)[:1] == 'B':
+        if str(ncf_rnc)[:1] in ('B', 'E'):
             invoice_id = env['account.move'].search([
-                ('ref', '=', ncf_rnc)
+                ('l10n_do_fiscal_number', '=', ncf_rnc)
                 ], limit=1)
             if invoice_id:
                 # Get action depending on invoice type

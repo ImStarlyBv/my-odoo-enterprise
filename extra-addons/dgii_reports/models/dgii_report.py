@@ -99,7 +99,7 @@ class DgiiReport(models.Model):
 
     _sql_constraints = [
         ('name_unique', 'UNIQUE(name, company_id)', 
-        _("You cannot have more than one report by period."))
+        "You cannot have more than one report by period.")
     ]
 
 
@@ -424,7 +424,7 @@ class DgiiReport(models.Model):
             ('company_id', '=', self.company_id.id),
             ('move_type', 'in', types),
             ('state', 'in', states),
-            ('is_l10n_do_fiscal_invoice', '=', True),
+            ('l10n_latam_use_documents', '=', True),
             ('payment_date', '>=', self.start_date),
             ('payment_date', '<=', self.end_date)
         ])
@@ -443,10 +443,10 @@ class DgiiReport(models.Model):
             ('invoice_date', '>=', self.start_date),
             ('invoice_date', '<=', self.end_date),
             ('company_id', '=', self.company_id.id),
-            ('is_l10n_do_fiscal_invoice', '=', True),
+            ('l10n_latam_use_documents', '=', True),
             ('state', 'in', states),
             ('move_type', 'in', types),
-            ('fiscal_type_id.prefix', '!=', False),
+            ('l10n_latam_document_type_id.doc_code_prefix', '!=', False),
         ], order='invoice_date asc')
         
         # Append pending invoices (fiscal_status = Partial, state = Paid)
@@ -549,7 +549,7 @@ class DgiiReport(models.Model):
                 line += 1
                 rnc_ced = self.formatted_rnc_cedula(
                     inv.partner_id.vat
-                ) if inv.fiscal_type_id.prefix != 'B17' else \
+                ) if inv._l10n_do_ncf_prefix() not in ('B17', 'E47') else \
                     self.formatted_rnc_cedula(
                     inv.company_id.vat)
                 values = {
@@ -557,10 +557,10 @@ class DgiiReport(models.Model):
                     'line': line,
                     'rnc_cedula': rnc_ced[0] if rnc_ced else False,
                     'identification_type': rnc_ced[1] if rnc_ced else False,
-                    'expense_type': inv.expense_type
-                    if inv.expense_type else False,
-                    'fiscal_invoice_number': inv.ref,
-                    'modified_invoice_number': inv.origin_out if
+                    'expense_type': inv.l10n_do_expense_type
+                    if inv.l10n_do_expense_type else False,
+                    'fiscal_invoice_number': inv.l10n_do_fiscal_number or '',
+                    'modified_invoice_number': inv.l10n_do_origin_ncf if
                     inv.move_type == 'in_refund' else False,
                     'invoice_date': inv.invoice_date,
                     'payment_date': inv.payment_date  if self.is_applicable_payment_date(inv) else False,
@@ -623,8 +623,8 @@ class DgiiReport(models.Model):
 
     def _process_income_dict(self, args, invoice):
         income_dict = args
-        if invoice.income_type:
-            income_dict[invoice.income_type] += abs(invoice.amount_untaxed_signed)
+        if invoice.l10n_do_income_type:
+            income_dict[invoice.l10n_do_income_type] += abs(invoice.amount_untaxed_signed)
         return income_dict
 
     def process_607_report_data(self, values):
@@ -692,7 +692,7 @@ class DgiiReport(models.Model):
         self.env.cr.execute("""
             SELECT
                 inv.move_id                     AS invoice_id,
-                j.payment_form                  AS payment_form,
+                j.l10n_do_payment_form         AS payment_form,
                 pr.amount                       AS amount_company,
                 pay_mv.date                     AS payment_date
             FROM   account_move_line inv
@@ -711,7 +711,7 @@ class DgiiReport(models.Model):
         result = defaultdict(list)
         for inv_id, form, amt, date in self.env.cr.fetchall():
             result[inv_id].append({
-                "payment_form":   form,   # journal.payment_form
+                "payment_form":   form,   # journal.l10n_do_payment_form
                 "amount_company": amt,    # company-currency amount
                 "payment_date":   date,   # payment move date
             })
@@ -735,7 +735,7 @@ class DgiiReport(models.Model):
             dgii_report_sale_line = []
 
             report_data = ''
-            invoice_ids.filtered(lambda inv: not inv.fiscal_status and inv.ref).write({
+            invoice_ids.filtered(lambda inv: not inv.fiscal_status and inv.l10n_do_fiscal_number).write({
                 'fiscal_status': 'blocked'
             }) 
             payments_map = self.quick_payments_for_invoices(invoice_ids.ids)
@@ -743,7 +743,7 @@ class DgiiReport(models.Model):
                 income_dict = self._process_income_dict(income_dict, inv)
                 rnc_ced = self.formatted_rnc_cedula(
                     inv.partner_id.vat
-                ) if inv.fiscal_type_id.prefix != 'B12' \
+                ) if inv._l10n_do_ncf_prefix() != 'B12' \
                     else self.formatted_rnc_cedula(inv.company_id.vat)
                 inv_payments_list = payments_map.get(inv.id, [])
                 payments = self._get_sale_payments_forms(inv, inv_payments_list)
@@ -753,12 +753,13 @@ class DgiiReport(models.Model):
                     'line': line,
                     'rnc_cedula': rnc_ced[0] if rnc_ced else False,
                     'identification_type': rnc_ced[1] if rnc_ced else False,
-                    'fiscal_invoice_number': inv.ref,
+                    'fiscal_invoice_number': inv.l10n_do_fiscal_number or '',
                     'modified_invoice_number':
-                        inv.origin_out if inv.origin_out and
-                        inv.origin_out[-10:-8] in ['01', '02', '14', '15'] else
+                        inv.l10n_do_origin_ncf if inv.l10n_do_origin_ncf and
+                        inv.l10n_do_origin_ncf[1:3] in [
+                            '01', '02', '14', '15', '31', '32', '44', '45'] else
                         False,
-                    'income_type': inv.income_type,
+                    'income_type': inv.l10n_do_income_type,
                     'invoice_date': inv.invoice_date,
                     'withholding_date': inv.payment_date if inv.move_type != 'out_refund' and self.is_applicable_for_withholding(inv) else False,
                     'invoiced_amount': abs(inv.amount_untaxed_signed),
@@ -782,7 +783,7 @@ class DgiiReport(models.Model):
                     'others': payments.get('others', 0) * inv_sign
                 }
 
-                if str(values['fiscal_invoice_number'])[-10:-8] == '02':
+                if str(values['fiscal_invoice_number'])[1:3] in ('02', '32'):
                     csmr_dict['csmr_ncf_qty'] += 1
                     csmr_dict['csmr_ncf_total_amount'] += \
                         values['invoiced_amount']
@@ -802,8 +803,8 @@ class DgiiReport(models.Model):
                 line += 1
                 values.update({'line': line})
                 dgii_report_sale_line.append(values)
-                if str(values.get('fiscal_invoice_number'))[-10:-8] == \
-                        '02' and abs(inv.amount_untaxed_signed) < 250000:
+                if str(values.get('fiscal_invoice_number'))[1:3] in \
+                        ('02', '32') and abs(inv.amount_untaxed_signed) < 250000:
                     excluded_line += 1
                     # Excluye las facturas de Consumo
                     # con monto menor a 250000 solo del txt
@@ -858,20 +859,20 @@ class DgiiReport(models.Model):
             )
             line = 0
             report_data = ''
-            invoice_ids.filtered(lambda inv: not inv.fiscal_status and inv.ref).write({
+            invoice_ids.filtered(lambda inv: not inv.fiscal_status and inv.l10n_do_fiscal_number).write({
                 'fiscal_status': 'blocked'
             })
             dgii_report_cancel_line = []
             for inv in invoice_ids:
-                if inv.ref:
+                if inv.l10n_do_fiscal_number:
                     line += 1
                     values = {
                         'dgii_report_id': rec.id,
                         'line': line,
                         'invoice_partner_id': inv.partner_id.id,
-                        'fiscal_invoice_number': inv.ref,
+                        'fiscal_invoice_number': inv.l10n_do_fiscal_number,
                         'invoice_date': inv.invoice_date,
-                        'annulation_type': inv.annulation_type,
+                        'annulation_type': inv.l10n_do_cancellation_type,
                         'invoice_id': inv.id
                     }
                     dgii_report_cancel_line.append(values)
@@ -936,7 +937,7 @@ class DgiiReport(models.Model):
                 ['posted'], 
                 ['in_invoice', 'in_refund']
             ).filtered(lambda inv: (inv.partner_id.country_id.code != 'DO') and \
-                                    (inv.fiscal_type_id.prefix == 'B17'))
+                                    (inv._l10n_do_ncf_prefix() in ('B17', 'E47')))
             line = 0
             report_data = ''
             invoice_ids.filtered(lambda inv: not inv.fiscal_status).write({
@@ -1330,13 +1331,18 @@ class DgiiReport(models.Model):
             'B01': 1,
             'E31': 1,
             'B02': 2,
+            'E32': 2,
             'B03': 3,
+            'E33': 3,
             'B04': 4,
             'E34': 4,
             'B12': 5,
             'B14': 6,
+            'E44': 6,
             'B15': 7,
+            'E45': 7,
             'B16': 8,
+            'E46': 8,
         }
 
     def get_income_type_dic(self):
@@ -1387,7 +1393,7 @@ class DgiiReport(models.Model):
             for sale_invoice in sale_invoices:
 
                 # AII                    
-                ncf_type = sale_invoice.invoice_id.fiscal_type_id.prefix
+                ncf_type = sale_invoice.invoice_id._l10n_do_ncf_prefix()
                 
                 if ncf_type not in box_ncf_type:
                     raise ValidationError(
@@ -1452,9 +1458,9 @@ class DgiiReport(models.Model):
                 attachment_a_lines[18]['amount'] += attachment_a_line_18_amount
 
                 # AIV
-                attachment_a_lines[box_income_type[sale_invoice.invoice_id.income_type]]['amount'] += \
+                attachment_a_lines[box_income_type[sale_invoice.invoice_id.l10n_do_income_type]]['amount'] += \
                     sale_invoice.invoiced_amount * sign_for_AII
-                attachment_a_lines[box_income_type[sale_invoice.invoice_id.income_type]]['invoice_ids'][0][2].append(sale_invoice.invoice_id.id)
+                attachment_a_lines[box_income_type[sale_invoice.invoice_id.l10n_do_income_type]]['invoice_ids'][0][2].append(sale_invoice.invoice_id.id)
                 
                 # AVIII
                 if sale_invoice.invoice_id.move_type == 'out_refund':
@@ -1462,7 +1468,7 @@ class DgiiReport(models.Model):
                     date_30_days_before = sale_invoice.invoice_id.date + timedelta(days=-30)
 
                     origin = self.env['account.move'].search([
-                        ('ref', '=', sale_invoice.invoice_id.origin_out),
+                        ('l10n_do_fiscal_number', '=', sale_invoice.invoice_id.l10n_do_origin_ncf),
                         ('invoice_date', '<', date_30_days_before)
                     ], limit=1)
 
@@ -1489,7 +1495,7 @@ class DgiiReport(models.Model):
             for purchase_invoice in purchase_invoices:
 
                 # AVIII
-                if purchase_invoice.invoice_id.fiscal_type_id.prefix in ('B14', 'E44'):
+                if purchase_invoice.invoice_id._l10n_do_ncf_prefix() in ('B14', 'E44'):
                     attachment_a_lines[44]['amount'] += purchase_invoice.invoice_id.amount_untaxed
 
                 # IXc

@@ -10,6 +10,35 @@
             <xpath expr="//block[@id='pos_accounting_section']" position="inside">
                 <!-- Campo oculto para condicionar visibilidad del bloque -->
                 <field name="l10n_do_is_fiscal" invisible="1"/>
+                <field name="l10n_do_available_document_type_ids" invisible="1"/>
+
+                <!-- Aviso cuando la caja no es fiscal -->
+                <setting string="POS Fiscal RD"
+                         help="Comprobantes fiscales NCF / e-CF de la DGII."
+                         invisible="l10n_do_is_fiscal">
+                    <div class="alert alert-warning mb-0" role="alert">
+                        Esta caja no es fiscal: su diario de facturación no tiene
+                        comprobantes NCF/e-CF. Selecciona en "Diarios por defecto"
+                        un diario de facturación con comprobantes fiscales para
+                        habilitar la selección de comprobante en el POS.
+                    </div>
+                </setting>
+
+                <!-- Comprobante por defecto y preferencia e-CF -->
+                <setting string="Comprobante por defecto"
+                         company_dependent="1"
+                         help="Tipo de comprobante con el que inicia cada orden."
+                         invisible="not l10n_do_is_fiscal">
+                    <field name="l10n_do_default_document_type_id"
+                           domain="[('id', 'in', l10n_do_available_document_type_ids)]"
+                           options="{'no_create': True, 'no_open': True}"/>
+                </setting>
+                <setting string="Preferir e-CF"
+                         company_dependent="1"
+                         help="Al elegir un cliente usa E31/E44/E45 en lugar de B01/B14/B15."
+                         invisible="not l10n_do_is_fiscal">
+                    <field name="l10n_do_prefer_ecf"/>
+                </setting>
 
                 <!-- Cliente consumidor por defecto (B02/E32) -->
                 <setting string="Cliente consumidor por defecto"

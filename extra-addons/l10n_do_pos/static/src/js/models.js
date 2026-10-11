@@ -40,11 +40,15 @@ patch(PosStore.prototype, {
     },
 
     /**
-     * Returns the default document type for the current order.
-     * Prefers "consumer" (B02/E32) as the safe default.
+     * Returns the default document type for the current order: the one
+     * configured on the POS, else "consumer" (B02) as the safe default.
      */
     get_default_doc_type() {
+        const configured = this.config.l10n_do_default_document_type_id;
+        const configuredId =
+            configured && typeof configured === "object" ? configured.id : configured;
         return (
+            (configuredId && this.document_types.find((dt) => dt.id === configuredId)) ||
             this.get_doc_type_by_ncf_type("consumer") ||
             this.document_types[0] ||
             false
@@ -83,25 +87,34 @@ patch(PosStore.prototype, {
 patch(PosOrder.prototype, {
     setup(vals) {
         super.setup(vals);
-        this.l10n_latam_document_type_id = vals.l10n_latam_document_type_id || false;
-        this.l10n_do_fiscal_number = vals.l10n_do_fiscal_number || "";
-        this.l10n_do_origin_ncf = vals.l10n_do_origin_ncf || "";
-        this.l10n_do_ncf_expiration_date = vals.l10n_do_ncf_expiration_date || false;
+        // Char/Date fields default values (do not overwrite m2o
+        // l10n_latam_document_type_id here — the related_models create()
+        // already set it as a proper record reference; setting it directly
+        // would replace the link with a raw number and break serialization).
+        if (this.l10n_do_fiscal_number === undefined) {
+            this.l10n_do_fiscal_number = vals.l10n_do_fiscal_number || "";
+        }
+        if (this.l10n_do_origin_ncf === undefined) {
+            this.l10n_do_origin_ncf = vals.l10n_do_origin_ncf || "";
+        }
+        if (this.l10n_do_ncf_expiration_date === undefined) {
+            this.l10n_do_ncf_expiration_date = vals.l10n_do_ncf_expiration_date || false;
+        }
         this.document_type = false;
         // e-CF fields (populated after _finalize_fiscal_order if E3x)
         this.l10n_do_is_ecf = false;
         this.ecf_qr_image = "";
         this.ecf_codigo_seguridad = "";
         this.ecf_pending = false;
+        this.ecf_error = "";
 
-        if (this.config?.l10n_do_is_fiscal && this.pos) {
+        if (this.config?.l10n_do_is_fiscal) {
             const savedDate = this.l10n_do_ncf_expiration_date;
-            if (this.l10n_latam_document_type_id) {
-                this.set_document_type(
-                    this.pos.get_doc_type_by_id(this.l10n_latam_document_type_id)
-                );
+            const existing = this.l10n_latam_document_type_id;
+            if (existing) {
+                this.set_document_type(this._get_doc_type_by_id(existing));
             } else {
-                this.set_document_type(this.pos.get_default_doc_type());
+                this.set_document_type(this._get_default_doc_type());
             }
             // Prefer the date stored on the order (e.g. from a confirmed invoice)
             // over the doc type default, so fiscal numbers already issued aren't affected.
@@ -111,13 +124,56 @@ patch(PosOrder.prototype, {
         }
     },
 
+    _get_document_types_all() {
+        return this.models?.["l10n_latam.document.type"]?.getAll() || [];
+    },
+
+    _get_doc_type_by_ncf_type(ncf_type) {
+        return (
+            this._get_document_types_all().find(
+                (dt) => dt.l10n_do_ncf_type === ncf_type
+            ) || false
+        );
+    },
+
+    _get_doc_type_by_id(id) {
+        const targetId = id && typeof id === "object" ? id.id : id;
+        return (
+            this._get_document_types_all().find((dt) => dt.id === targetId) ||
+            this._get_doc_type_by_ncf_type("consumer")
+        );
+    },
+
+    _get_default_doc_type() {
+        const configured = this.config?.l10n_do_default_document_type_id;
+        const configuredId =
+            configured && typeof configured === "object" ? configured.id : configured;
+        return (
+            (configuredId &&
+                this._get_document_types_all().find((dt) => dt.id === configuredId)) ||
+            this._get_doc_type_by_ncf_type("consumer") ||
+            this._get_document_types_all()[0] ||
+            false
+        );
+    },
+
+    _get_default_consumer_partner() {
+        const ref = this.config?.l10n_do_default_consumer_partner_id;
+        if (!ref) return false;
+        const partnerId = Array.isArray(ref) ? ref[0] : (typeof ref === "object" ? ref.id : ref);
+        if (!partnerId) return false;
+        return this.models?.["res.partner"]?.get(partnerId) || false;
+    },
+
     /**
      * Sets the document type and applies its fiscal position to all lines.
      * @param {Object} doc_type — l10n_latam.document.type record from PosStore
      */
     set_document_type(doc_type) {
         this.document_type = doc_type;
-        this.l10n_latam_document_type_id = doc_type?.id || false;
+        // Use update() so the many2one relation is properly linked; setting
+        // the id directly would store a number and serialize as false.
+        this.update({ l10n_latam_document_type_id: doc_type || false });
         this.l10n_do_ncf_expiration_date = doc_type?.l10n_do_ncf_expiration_date || false;
 
         if (doc_type?.fiscal_position_id) {
@@ -133,14 +189,39 @@ patch(PosOrder.prototype, {
                 }
             }
         }
+
+    },
+
+    /**
+     * If the current doc type is consumer/e-consumer and the order has no
+     * partner, assigns the POS default consumer partner.
+     * Called from the UI (button handler) only — NOT during initial setup,
+     * since set_partner triggers pricelist/fiscal-position updates that
+     * can crash before the order is fully loaded.
+     */
+    apply_default_consumer_partner_if_needed() {
+        if (!this.config?.l10n_do_is_fiscal) return;
+        const doc_type = this.document_type;
+        const ncfType = doc_type?.l10n_do_ncf_type;
+        if (ncfType !== "consumer" && ncfType !== "e-consumer") return;
+        if (doc_type?.is_vat_required) return;
+        if (this.get_partner()) return;
+        const defaultPartner = this._get_default_consumer_partner();
+        if (!defaultPartner) return;
+        this._setting_default_consumer = true;
+        try {
+            this.set_partner(defaultPartner);
+        } finally {
+            this._setting_default_consumer = false;
+        }
     },
 
     get_document_type() {
-        if (!this.document_type && this.pos && this.config?.l10n_do_is_fiscal) {
+        if (!this.document_type && this.config?.l10n_do_is_fiscal) {
             if (this.l10n_latam_document_type_id) {
-                this.document_type = this.pos.get_doc_type_by_id(this.l10n_latam_document_type_id);
+                this.document_type = this._get_doc_type_by_id(this.l10n_latam_document_type_id);
             } else {
-                this.document_type = this.pos.get_default_doc_type();
+                this.document_type = this._get_default_doc_type();
             }
         }
         return this.document_type;
@@ -154,20 +235,32 @@ patch(PosOrder.prototype, {
      *   taxpayer      → fiscal   (B01 / E31)
      *   special       → special  (B14 / E44)
      *   governmental  → governmental (B15 / E45)
-     *   anything else → consumer (B02 / E32)
+     *   anything else → POS default document type (B02 / E32)
+     *
+     * With `l10n_do_prefer_ecf` the electronic type (E31/E44/E45) is used
+     * when the journal has it; otherwise the traditional B-type.
      */
     set_partner(partner) {
         super.set_partner(partner);
         if (!this.config?.l10n_do_is_fiscal) return;
+        // Avoid infinite recursion when set_document_type assigns the default consumer.
+        if (this._setting_default_consumer) return;
 
         const payerTypeToNcfType = {
             taxpayer: "fiscal",
             special: "special",
             governmental: "governmental",
         };
-        const ncfType = payerTypeToNcfType[partner?.l10n_do_dgii_tax_payer_type] || "consumer";
+        const ncfType = payerTypeToNcfType[partner?.l10n_do_dgii_tax_payer_type];
+        if (!ncfType) {
+            // Consumidor final o sin cliente: comprobante por defecto de la caja.
+            this.set_document_type(this._get_default_doc_type());
+            return;
+        }
+        const ecfType =
+            this.config.l10n_do_prefer_ecf && this._get_doc_type_by_ncf_type(`e-${ncfType}`);
         this.set_document_type(
-            this.pos.get_doc_type_by_ncf_type(ncfType) || this.pos.get_default_doc_type()
+            ecfType || this._get_doc_type_by_ncf_type(ncfType) || this._get_default_doc_type()
         );
     },
 
@@ -180,7 +273,7 @@ patch(PosOrder.prototype, {
         this.l10n_do_fiscal_number = data.l10n_do_fiscal_number || "";
         this.l10n_do_ncf_expiration_date = data.l10n_do_ncf_expiration_date || false;
         if (data.l10n_latam_document_type_id) {
-            const dt = this.pos.get_doc_type_by_id(data.l10n_latam_document_type_id);
+            const dt = this._get_doc_type_by_id(data.l10n_latam_document_type_id);
             if (dt) this.set_document_type(dt);
         }
         // e-CF
@@ -188,6 +281,7 @@ patch(PosOrder.prototype, {
         this.ecf_qr_image = data.ecf_qr_image || "";
         this.ecf_codigo_seguridad = data.ecf_codigo_seguridad || "";
         this.ecf_pending = data.ecf_pending || false;
+        this.ecf_error = data.ecf_error || "";
     },
 
     /**
@@ -222,12 +316,8 @@ patch(PosOrder.prototype, {
      */
     get_l10n_do_fiscal_totals() {
         const fmt = (v) => {
-            try {
-                return this.pos.env.utils.formatCurrency(v);
-            } catch {
-                const sym = this.pos.currency?.symbol || "";
-                return `${sym} ${Number(v).toFixed(2)}`;
-            }
+            const sym = this.currency?.symbol || "";
+            return `${sym} ${Number(v).toFixed(2)}`;
         };
 
         let subtotal_raw = 0;

@@ -19,7 +19,7 @@
                         invisible="not is_ecf_invoice
                                    or not l10n_do_enable_resend_button
                                    or state != 'posted'
-                                   or ecf_validation_status not in ('error', 'pending', 'rfce', 'skipped')"/>
+                                   or ecf_validation_status not in ('error', 'to_send', 'pending')"/>
                 <field name="l10n_do_enable_resend_button" invisible="1"/>
                 <button name="action_view_ecf_error"
                         type="object"
@@ -58,8 +58,8 @@
                         <field name="ecf_validation_status" readonly="1"
                                widget="badge"
                                decoration-success="ecf_validation_status in ('1', 'success')"
-                               decoration-warning="ecf_validation_status in ('pending', '3')"
-                               decoration-danger="ecf_validation_status == 'error'"
+                               decoration-warning="ecf_validation_status in ('pending', 'to_send', '3')"
+                               decoration-danger="ecf_validation_status in ('error', '2', '0')"
                                decoration-info="ecf_validation_status in ('4', 'rfce')"
                                decoration-muted="ecf_validation_status == 'skipped'"/>
                         <field name="ecf_codigo_seguridad" readonly="1"
@@ -91,6 +91,21 @@
                 </group>
             </xpath>
 
+        </field>
+    </record>
+
+    <record id="view_account_invoice_filter_inherited_ecf" model="ir.ui.view">
+        <field name="name">account.invoice.select.inherited.ecf</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_account_invoice_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[@name='draft']" position="before">
+                <filter name="ecf_to_send" string="e-CF pendientes de envío"
+                        domain="[('ecf_validation_status', '=', 'to_send'), ('state', '=', 'posted')]"/>
+                <filter name="ecf_error" string="e-CF con error"
+                        domain="[('ecf_validation_status', 'in', ('error', '2', '0'))]"/>
+                <separator/>
+            </xpath>
         </field>
     </record>
 </odoo>
