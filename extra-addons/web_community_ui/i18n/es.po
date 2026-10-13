@@ -1,0 +1,86 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* web_community_ui
+#
+# Translators:
+# Wil Odoo, 2024
+# Larissa Manderfeld, 2024
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 18.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-12 00:00+0000\n"
+"PO-Revision-Date: 2026-10-12 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Spanish\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: nplurals=3; plural=(n == 1) ? 0 : ((n != 0 && n % 1000000 == 0) ? 1 : 2);\n"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/home_menu/home_menu.xml:0
+msgid "— open me anywhere with"
+msgstr "— puede abrirme donde quiera con"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/share_url/burger_menu.xml:0
+msgid "Close menu"
+msgstr "Cerrar menú"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/color_scheme/color_scheme_menu_items.js:0
+msgid "Dark Mode"
+msgstr "Modo oscuro"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/home_menu/home_menu_service.js:0
+msgid "Home"
+msgstr "Inicio"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/navbar/navbar.js:0
+msgid "Home menu"
+msgstr "Menú de inicio"
+
+#. module: web_community_ui
+#: model:ir.model.fields,field_description:web_community_ui.field_res_users_settings__homemenu_config
+msgid "Home Menu Configuration"
+msgstr "Configuración del menú principal"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/home_menu/home_menu.xml:0
+msgid "No result"
+msgstr "Sin resultado"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/navbar/navbar.js:0
+msgid "Previous view"
+msgstr "Vista anterior"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/share_url/share_url.js:0
+msgid "Share"
+msgstr "Compartir"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/share_url/burger_menu.xml:0
+msgid "Share URL"
+msgstr "Compartir URL"
+
+#. module: web_community_ui
+#. odoo-javascript
+#: code:addons/web_community_ui/static/src/webclient/home_menu/home_menu.xml:0
+msgid "TIP"
+msgstr "CONSEJO"
